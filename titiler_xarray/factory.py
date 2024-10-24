@@ -20,7 +20,7 @@ from titiler.core.models.mapbox import TileJSON
 from titiler.core.resources.enums import ImageType
 from titiler.core.resources.responses import JSONResponse
 from titiler.core.utils import render_image
-from titiler.xarray.reader import ZarrReader
+from titiler.xarray.io import Reader as XarrayReader
 
 
 @dataclass

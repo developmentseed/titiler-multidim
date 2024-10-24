@@ -1,5 +1,5 @@
 [project]
-name = "titiler.xarray"
+name = "titiler_xr"
 description = "TiTiler extension for xarray."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -36,10 +36,13 @@ dependencies = [
     "aiohttp",
     "requests",
     "pydantic==2.0.2",
-    "titiler.core>=0.14.1,<0.15",
+    "titiler.core@git+https://github.com/developmentseed/titiler.git@feature/add-xarray#subdirectory=src/titiler/core",
+    "titiler.xarray@git+https://github.com/developmentseed/titiler.git@feature/add-xarray#subdirectory=src/titiler/xarray/",
     "pydantic-settings~=2.0",
     "pandas==1.5.3",
     "redis",
+    "fastapi>=0.108.0,<0.109.0",
+    "starlette>=0.29.0,<0.33.0",    
 ]
 
 [project.optional-dependencies]
@@ -113,8 +116,8 @@ build-backend = "pdm.pep517.api"
 
 [tool.pdm.version]
 source = "file"
-path = "titiler/xarray/__init__.py"
+path = "titiler_xarray/__init__.py"
 
 [tool.pdm.build]
-includes = ["titiler/xarray"]
+includes = ["titiler_xarray"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
