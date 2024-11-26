@@ -220,14 +220,16 @@ def test_histogram_error(app):
 
 
 def test_map_without_params(app):
-    response = app.get("/map")
+    response = app.get("/WebMercatorQuad/map")
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, "Step 1: Enter the URL of your Zarr store")
 
 
 def test_map_with_params(app):
-    response = app.get("/map", params={"url": test_zarr_store, "variable": "CDD0"})
+    response = app.get(
+        "/WebMercatorQuad/map", params={"url": test_zarr_store, "variable": "CDD0"}
+    )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, "<div id='map' class=\"hidden\"></div>")
