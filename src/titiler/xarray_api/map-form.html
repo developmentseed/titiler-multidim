@@ -123,14 +123,6 @@
                 <input type="text" id="url-input" placeholder="Enter URL">
                 <br />
                 <h4>Step 2: Define other fields to use when opening the URL with xarray</h4>
-                <input type="checkbox" id="reference" name="reference">
-                <label for="reference">Is this URL for a reference file (i.e. <a href="https://fsspec.github.io/kerchunk">kerchunk</a>)?:</label>
-                <br />
-                <br />
-                <input type="checkbox" id="consolidated" name="consolidated" checked>
-                <label for="consolidated">Does this Zarr store have consolidated metadata? (default should be to have consolidated metadata, learn more in the: <a href="https://zarr.readthedocs.io/en/stable/tutorial.html#consolidating-metadata">Zarr docs</a>).</label>
-                <br />
-                <br />
                 <input type="text" id="group-input" placeholder="OPTIONAL: Group">
                 <span><i><br />If the URL is for a zarr hierarchy or HDF5, please specify the group to use when opening the dataset.</i></span>
                 <br />
@@ -173,16 +165,28 @@
         </div>
 
         <script type="text/javascript">
-                // Create colormaps dropdown
-                var colormaps = ["accent","accent_r","afmhot","afmhot_r","autumn","autumn_r","binary","binary_r","blues","blues_r","bone","bone_r","brbg","brbg_r","brg","brg_r","bugn","bugn_r","bupu","bupu_r","bwr","bwr_r","cfastie","cividis","cividis_r","cmrmap","cmrmap_r","cool","cool_r","coolwarm","coolwarm_r","copper","copper_r","cubehelix","cubehelix_r","dark2","dark2_r","flag","flag_r","gist_earth","gist_earth_r","gist_gray","gist_gray_r","gist_heat","gist_heat_r","gist_ncar","gist_ncar_r","gist_rainbow","gist_rainbow_r","gist_stern","gist_stern_r","gist_yarg","gist_yarg_r","gnbu","gnbu_r","gnuplot","gnuplot2","gnuplot2_r","gnuplot_r","gray","gray_r","greens","greens_r","greys","greys_r","hot","hot_r","hsv","hsv_r","inferno","inferno_r","jet","jet_r","magma","magma_r","name","nipy_spectral","nipy_spectral_r","ocean","ocean_r","oranges","oranges_r","orrd","orrd_r","paired","paired_r","pastel1","pastel1_r","pastel2","pastel2_r","pink","pink_r","piyg","piyg_r","plasma","plasma_r","prgn","prgn_r","prism","prism_r","pubu","pubu_r","pubugn","pubugn_r","puor","puor_r","purd","purd_r","purples","purples_r","rainbow","rainbow_r","rdbu","rdbu_r","rdgy","rdgy_r","rdpu","rdpu_r","rdylbu","rdylbu_r","rdylgn","rdylgn_r","reds","reds_r","rplumbo","schwarzwald","seismic","seismic_r","set1","set1_r","set2","set2_r","set3","set3_r","spectral","spectral_r","spring","spring_r","summer","summer_r","tab10","tab10_r","tab20","tab20_r","tab20b","tab20b_r","tab20c","tab20c_r","terrain","terrain_r","twilight","twilight_r","twilight_shifted","twilight_shifted_r","value","viridis","viridis_r","winter","winter_r","wistia","wistia_r","ylgn","ylgn_r","ylgnbu","ylgnbu_r","ylorbr","ylorbr_r","ylorrd","ylorrd_r"]
-                var colormapDropdown = document.getElementById("colormap-dropdown");
-
-                // Populate the dropdown
-                colormaps.forEach(function(item) {
-                    var option = document.createElement("option");
-                    option.value = item;
-                    option.text = item;
-                    colormapDropdown.add(option);
+                document.addEventListener('DOMContentLoaded', function() {
+                    var colormapDropdown = document.getElementById("colormap-dropdown");
+                    
+                    // Fetch colormaps from API
+                    fetch('/colorMaps')
+                        .then(response => response.json())
+                        .then(data => {
+                            const colormaps = data.colorMaps.sort((a, b) => a.localeCompare(b));
+                            colormapDropdown.innerHTML = '';
+                            
+                            colormaps.forEach(function(item) {
+                                var option = document.createElement("option");
+                                option.value = item;
+                                option.text = item;
+                                colormapDropdown.appendChild(option);
+                            });
+                        })
+                        .catch(error => {
+                            console.error('Error fetching colormaps:', error);
+                            // Optionally add a default option or error message in the dropdown
+                            colormapDropdown.innerHTML = '<option value="">Error loading colormaps</option>';
+                        });
                 });
 
                 // Get vars button action
@@ -210,11 +214,9 @@
                     loadingIcon.style.display = 'inline-block';
                     var urlValue = document.getElementById("url-input").value;
                     var groupValue = document.getElementById("group-input").value;
-                    var reference = document.getElementById("reference").checked;
-                    var consolidated = document.getElementById("consolidated").checked;
 
                     // Fetch data from a URL
-                    var variablesPath = `/variables?url=${encodeURIComponent(urlValue)}&reference=${reference}&consolidated=${consolidated}`
+                    var variablesPath = `/variables?url=${encodeURIComponent(urlValue)}`
                     if (groupValue) {
                         variablesPath += `&group=${groupValue}`
                     }
@@ -276,11 +278,9 @@
                     loadingIcon.style.display = 'inline-block';
                     var urlValue = document.getElementById("url-input").value;
                     var groupValue = document.getElementById("group-input").value;
-                    var reference = document.getElementById("reference").checked;
-                    var consolidated = document.getElementById("consolidated").checked;
                     var variableInput = getVariableInput();
                     // Fetch data from a URL
-                    var histogramPath = `/histogram?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableInput)}&reference=${reference}&consolidated=${consolidated}`
+                    var histogramPath = `/histogram?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableInput)}`
                     if (groupValue) {
                         histogramPath += `&group=${groupValue}`
                     }
@@ -338,17 +338,12 @@
                 document.getElementById("go-btn").addEventListener("click", function() {
                     var urlValue = document.getElementById("url-input").value;
                     var groupValue = document.getElementById("group-input").value;
-                    var reference = document.getElementById("reference").checked;
                     var variableValue = getVariableInput();
                     var rescaleValue = document.getElementById("rescale-input").value;
                     var colormapValue = document.getElementById("colormap-dropdown").value;
-                    var consolidated = document.getElementById("consolidated").checked;
                     if (urlValue) {
                         // Redirect to the map URL with the input value as a parameter
-                        var href = `map?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableValue)}&consolidated=${consolidated}`;
-                        if (reference) {
-                            href += `&reference=${reference}`;
-                        }
+                        var href = `map?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableValue)}`;
                         if (rescaleValue) {
                             href += `&rescale=${encodeURIComponent(rescaleValue)}`;
                         }

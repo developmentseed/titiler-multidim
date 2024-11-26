@@ -5,10 +5,19 @@
     181.00558659217876,
     91.01123595505618
   ],
-  "minzoom": 0,
-  "maxzoom": 0,
-  "band_metadata": [],
-  "band_descriptions": [],
+  "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
+  "band_metadata": [
+    [
+      "b1",
+      {}
+    ]
+  ],
+  "band_descriptions": [
+    [
+      "b1",
+      "value"
+    ]
+  ],
   "dtype": "float64",
   "nodata_type": "Nodata",
   "name": "var1",

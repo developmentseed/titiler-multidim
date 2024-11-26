@@ -15,10 +15,10 @@ source .venv/bin/activate
 
 python -m pip install -e . uvicorn
 export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
-uvicorn titiler.xarray.main:app --reload
+uvicorn titiler.xarray_api.main:app --reload
 ```
 
-To access the docs, visit http://127.0.0.1:8000/api.html.
+To access the docs, visit <http://127.0.0.1:8000/api.html>.
 ![](https://github.com/developmentseed/titiler-xarray/assets/10407788/4368546b-5b60-4cd5-86be-fdd959374b17)
 
 ## Testing
@@ -45,7 +45,6 @@ The Github Actions workflow defined in [.github/workflows/ci.yml](./.github/work
 * There are 2 stacks - one production and one development.
 * The production stack is deployed when the `main` branch is tagged, creating a new release. The production stack will deploy to a stack with an API Gateway associated with the domain prod-titiler-xarray.delta-backend.com/.
 * The development stack will be deployed upon pushes to the `dev` and `main` branches. The development stack will deploy to a stack with an API Gateway associated with the domain dev-titiler-xarray.delta-backend.com/.
-
 
 ## New Deployments
 
@@ -93,7 +92,6 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
     # Deploy in specific region
     AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=smce-veda STACK_STAGE=production  npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-production
     ```
-
 
 **Important**
 
