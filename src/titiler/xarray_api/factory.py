@@ -61,7 +61,7 @@ class XarrayTilerFactory(BaseTilerFactory):
             io_params=Depends(XarrayIOParams),
         ) -> List[str]:
             """return available variables."""
-            return XarrayReader.list_variables(
+            return self.reader.list_variables(
                 src_path=src_path,
                 group=io_params.group,
                 decode_times=io_params.decode_times,
