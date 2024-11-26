@@ -73,7 +73,6 @@ def get_info_test(app, ds_params):
         params=ds_params["params"],
     )
     assert response.status_code == 200
-    print(json.dumps(response.json(), indent=2))
     expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_info.json"
     with open(
         expectation_fn,
@@ -104,9 +103,7 @@ def get_tilejson_test(app, ds_params):
         params=ds_params["params"],
     )
     assert response.status_code == 200
-    print(json.dumps(response.json(), indent=2))
     expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_tilejson.json"
-    print(expectation_fn)
     with open(
         expectation_fn,
         "r",
