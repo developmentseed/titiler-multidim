@@ -4,6 +4,7 @@ import numpy as np
 import xarray as xr
 
 # Define dimensions and chunk sizes
+res = 5
 time_dim = 10
 lat_dim = 36
 lon_dim = 72
@@ -11,8 +12,8 @@ chunk_size = (10, 10, 10)
 
 # Create coordinates
 time = np.arange(time_dim)
-lat = np.linspace(-90, 90, lat_dim)
-lon = np.linspace(-180, 180, lon_dim, endpoint=False)
+lat = np.linspace(-90 + res / 2, 90 - res / 2, lat_dim)
+lon = np.linspace(-180 + res / 2, 180 - res / 2, lon_dim)
 
 # Initialize variables with random data
 CDD0 = xr.DataArray(
@@ -48,4 +49,4 @@ ds = xr.Dataset(
 )
 
 # Save dataset to a local Zarr store
-ds.to_zarr("fixtures/test_zarr_store.zarr", mode="w")
+ds.to_zarr("tests/fixtures/test_zarr_store.zarr", mode="w")

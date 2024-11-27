@@ -1,4 +1,5 @@
-""" Generate a pyramid for tests. """
+"""Generate a pyramid for tests."""
+
 from datetime import datetime
 
 import numpy as np
@@ -10,8 +11,11 @@ def generate_random_pixel_data(n):
     Generate random pixel data for a given number of pixels.
     """
     time_data = [datetime.now()]
-    y_data = np.linspace(-90, 90, n)
-    x_data = np.linspace(-180, 180, n)
+    xmin, ymin, xmax, ymax = -180, -90, 180, 90
+    xres = (xmax - xmin) / n
+    yres = (ymax - ymin) / n
+    y_data = np.linspace(ymin + yres / 2, ymax - yres / 2, n)
+    x_data = np.linspace(xmin + xres / 2, xmax - xres / 2, n)
     value_data = np.random.rand(n**2)
     return time_data, y_data, x_data, value_data
 

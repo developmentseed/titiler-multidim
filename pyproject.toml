@@ -55,7 +55,10 @@ test = [
     "yappi",
 ]
 dev = [
-    "pre-commit"
+    "dask>=2023.5.0",
+    "ipython>=8.12.3",
+    "netcdf4>=1.7.2",
+    "pre-commit",
 ]
 debug = [
     "yappi"
