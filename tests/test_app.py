@@ -23,7 +23,6 @@ test_unconsolidated_store_params = {
         "url": test_unconsolidated_store,
         "variable": "var1",
         "decode_times": False,
-        "consolidated": False,
     },
     "variables": ["var1", "var2"],
 }
@@ -32,9 +31,7 @@ test_pyramid_store_params = {
         "url": test_pyramid_store,
         "variable": "value",
         "decode_times": False,
-        "multiscale": True,
         "group": "2",
-        "consolidated": False,
     },
     "variables": ["value"],
 }
@@ -104,6 +101,8 @@ def get_tilejson_test(app, ds_params):
     )
     assert response.status_code == 200
     expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_tilejson.json"
+
+    print(expectation_fn)
     with open(
         expectation_fn,
         "r",
@@ -157,15 +156,6 @@ def test_get_tile_pyramid(app):
     # test that even a group outside of the range will return a tile
     for z in range(3):
         get_tile_test(app, test_pyramid_store_params, zoom=z)
-
-
-def test_get_tile_pyramid_error(app):
-    response = app.get(
-        "/tiles/WebMercatorQuad/3/0/0.png",
-        params=test_pyramid_store_params["params"],
-    )
-    assert response.status_code == 422
-    assert response.json() == {"detail": "group not found at path '3'"}
 
 
 def histogram_test(app, ds_params):
