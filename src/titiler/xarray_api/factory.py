@@ -1,6 +1,6 @@
 """TiTiler.xarray factory."""
 
-from typing import List, Literal, Optional, Type, Union
+from typing import List, Literal, Optional, Type
 from urllib.parse import urlencode
 
 import jinja2
@@ -15,25 +15,9 @@ from typing_extensions import Annotated
 from titiler.core.dependencies import ColorFormulaParams, DefaultDependency
 from titiler.core.resources.enums import ImageType
 from titiler.core.resources.responses import JSONResponse
-from titiler.xarray.dependencies import XarrayIOParams, XarrayParams
+from titiler.xarray.dependencies import DatasetParams, XarrayIOParams, XarrayParams
 from titiler.xarray.factory import TilerFactory as BaseTilerFactory
 from titiler.xarray_api.reader import XarrayReader
-
-
-def nodata_dependency(
-    nodata: Annotated[
-        Optional[Union[str, int, float]],
-        Query(
-            title="Nodata value",
-            description="Overwrite internal Nodata value",
-        ),
-    ] = None,
-) -> Optional[float]:
-    """Nodata dependency."""
-    if nodata is not None:
-        nodata = np.nan if nodata == "nan" else float(nodata)
-
-    return None
 
 
 @define(kw_only=True)
@@ -42,6 +26,7 @@ class XarrayTilerFactory(BaseTilerFactory):
 
     reader: Type[XarrayReader] = XarrayReader
     reader_dependency: Type[DefaultDependency] = XarrayParams
+    dataset_dependency: Type[DefaultDependency] = DatasetParams
 
     def register_routes(self) -> None:  # noqa: C901
         """Register Info / Tiles / TileJSON endoints."""
@@ -160,7 +145,7 @@ class XarrayTilerFactory(BaseTilerFactory):
             color_formula=Depends(ColorFormulaParams),
             colormap=Depends(self.colormap_dependency),
             render_params=Depends(self.render_dependency),
-            nodata=Depends(nodata_dependency),
+            dataset_params=Depends(self.dataset_dependency),
         ):
             """Return map Viewer."""
             jinja2_env = jinja2.Environment(
