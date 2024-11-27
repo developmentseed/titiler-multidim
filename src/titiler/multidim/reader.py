@@ -5,9 +5,9 @@ from typing import Any, List, Optional
 
 import attr
 
+from titiler.multidim.redis_pool import get_redis
+from titiler.multidim.settings import ApiSettings
 from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
-from titiler.xarray_api.redis_pool import get_redis
-from titiler.xarray_api.settings import ApiSettings
 
 api_settings = ApiSettings()
 cache_client = get_redis()

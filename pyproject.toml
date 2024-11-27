@@ -1,5 +1,5 @@
 [project]
-name = "titiler-xarray-api"
+name = "titiler-multidim"
 description = "TiTiler application extension for titiler.xarray."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -121,12 +121,12 @@ build-backend = "pdm.backend"
 
 [tool.pdm.version]
 source = "file"
-path = "src/titiler/xarray_api/__init__.py"
+path = "src/titiler/multidim/__init__.py"
 
 
 [tool.pdm]
 package-dir = "src/"
 
 [tool.pdm.build]
-includes = ["src/titiler/xarray_api/"]
+includes = ["src/titiler/multidim/"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]

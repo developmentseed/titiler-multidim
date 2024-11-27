@@ -5,7 +5,7 @@ import os
 import fakeredis
 import redis  # type: ignore
 
-from titiler.xarray_api.settings import ApiSettings
+from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
 

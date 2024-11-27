@@ -15,9 +15,9 @@ from typing_extensions import Annotated
 from titiler.core.dependencies import ColorFormulaParams, DefaultDependency
 from titiler.core.resources.enums import ImageType
 from titiler.core.resources.responses import JSONResponse
+from titiler.multidim.reader import XarrayReader
 from titiler.xarray.dependencies import DatasetParams, XarrayIOParams, XarrayParams
 from titiler.xarray.factory import TilerFactory as BaseTilerFactory
-from titiler.xarray_api.reader import XarrayReader
 
 
 @define(kw_only=True)

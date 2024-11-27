@@ -15,7 +15,7 @@ source .venv/bin/activate
 
 python -m pip install -e . uvicorn
 export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
-uvicorn titiler.xarray_api.main:app --reload
+uvicorn titiler.multidim.main:app --reload
 ```
 
 To access the docs, visit <http://127.0.0.1:8000/api.html>.

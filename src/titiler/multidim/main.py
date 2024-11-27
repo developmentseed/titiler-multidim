@@ -1,4 +1,4 @@
-"""titiler.xarray_api."""
+"""titiler.multidim."""
 
 import logging
 
@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 
-import titiler.xarray_api.reader as reader
+import titiler.multidim.reader as reader
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import (
@@ -16,11 +16,11 @@ from titiler.core.middleware import (
     LoggerMiddleware,
     TotalTimeMiddleware,
 )
-from titiler.xarray_api import __version__ as titiler_version
-from titiler.xarray_api.factory import XarrayTilerFactory
-from titiler.xarray_api.middleware import ServerTimingMiddleware
-from titiler.xarray_api.redis_pool import get_redis
-from titiler.xarray_api.settings import ApiSettings
+from titiler.multidim import __version__ as titiler_version
+from titiler.multidim.factory import XarrayTilerFactory
+from titiler.multidim.middleware import ServerTimingMiddleware
+from titiler.multidim.redis_pool import get_redis
+from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True
