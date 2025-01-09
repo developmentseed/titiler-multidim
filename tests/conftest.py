@@ -1,4 +1,4 @@
-"""titiler.xarray tests configuration."""
+"""titiler.multidim tests configuration."""
 
 import pytest
 from fastapi.testclient import TestClient

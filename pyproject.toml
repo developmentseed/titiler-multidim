@@ -130,3 +130,6 @@ package-dir = "src/"
 [tool.pdm.build]
 includes = ["src/titiler/multidim/"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"

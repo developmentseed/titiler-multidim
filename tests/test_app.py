@@ -102,7 +102,6 @@ def get_tilejson_test(app, ds_params):
     assert response.status_code == 200
     expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_tilejson.json"
 
-    print(expectation_fn)
     with open(
         expectation_fn,
         "r",
@@ -163,7 +162,6 @@ def histogram_test(app, ds_params):
         "/histogram",
         params=ds_params["params"],
     )
-    print(json.dumps(response.json(), indent=2))
     assert response.status_code == 200
     with open(
         f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_histogram.json",

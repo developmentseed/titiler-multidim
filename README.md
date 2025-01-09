@@ -1,4 +1,4 @@
-# titiler-xarray
+# titiler-multidim
 
 ---
 
@@ -29,13 +29,13 @@ To run all the tests:
 
 ```bash
 python -m pip install -e ".[test]"
-python -m pytest --cov titiler.xarray --cov-report term-missing -s -vv
+python -m pytest 
 ```
 
 To run just one test:
 
 ```bash
-python -m pytest tests/test_app.py::test_get_info --cov titiler.xarray --cov-report term-missing -s -vv
+python -m pytest tests/test_app.py::test_get_info 
 ```
 
 ## VEDA Deployment
