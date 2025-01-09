@@ -1,6 +1,6 @@
 [project]
-name = "titiler.xarray"
-description = "TiTiler extension for xarray."
+name = "titiler-multidim"
+description = "TiTiler application extension for titiler.xarray."
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [
@@ -25,6 +25,8 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "titiler.core>=0.19.0,<0.20",
+    "titiler.xarray>=0.19.0,<0.20",
     "cftime",
     "h5netcdf",
     "numpy<2.0.0",
@@ -36,13 +38,12 @@ dependencies = [
     "s3fs",
     "aiohttp",
     "requests",
-    "pydantic==2.0.2",
-    "titiler.core>=0.14.1,<0.15",
     "pydantic-settings~=2.0",
+    "pydantic>=2.4,<3.0",
     "pandas==1.5.3",
     "redis",
-    "fastapi>=0.100.0,<0.107.0",
-    "starlette<0.28",
+    "fastapi>=0.108.0,<0.109.0",
+    "starlette>=0.29.0,<0.33.0",
 ]
 
 [project.optional-dependencies]
@@ -50,11 +51,14 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
-    "httpx",
+    "httpx<0.28",
     "yappi",
 ]
 dev = [
-    "pre-commit"
+    "dask>=2023.5.0",
+    "ipython>=8.12.3",
+    "netcdf4>=1.7.2",
+    "pre-commit",
 ]
 debug = [
     "yappi"
@@ -111,13 +115,21 @@ namespace_packages = true
 explicit_package_bases = true
 
 [build-system]
-requires = ["pdm-pep517"]
-build-backend = "pdm.pep517.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
 
 [tool.pdm.version]
 source = "file"
-path = "titiler/xarray/__init__.py"
+path = "src/titiler/multidim/__init__.py"
+
+
+[tool.pdm]
+package-dir = "src/"
 
 [tool.pdm.build]
-includes = ["titiler/xarray"]
+includes = ["src/titiler/multidim/"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"

@@ -10,7 +10,7 @@ RUN yum install -y gcc-c++
 COPY pyproject.toml pyproject.toml
 COPY LICENSE LICENSE
 COPY README.md README.md
-COPY titiler/ titiler/
+COPY src/titiler/ src/titiler/
 
 # Install dependencies
 # HACK: aiobotocore has a tight botocore dependency

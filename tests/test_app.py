@@ -5,7 +5,6 @@ from helpers import find_string_in_stream
 
 DATA_DIR = "tests/fixtures"
 test_zarr_store = os.path.join(DATA_DIR, "test_zarr_store.zarr")
-test_reference_store = os.path.join(DATA_DIR, "reference.json")
 test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")
 test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
@@ -15,15 +14,6 @@ test_zarr_store_params = {
     "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
 }
 
-test_reference_store_params = {
-    "params": {
-        "url": test_reference_store,
-        "variable": "value",
-        "reference": True,
-        "decode_times": False,
-    },
-    "variables": ["value"],
-}
 test_netcdf_store_params = {
     "params": {"url": test_netcdf_store, "variable": "data", "decode_times": False},
     "variables": ["data"],
@@ -33,7 +23,6 @@ test_unconsolidated_store_params = {
         "url": test_unconsolidated_store,
         "variable": "var1",
         "decode_times": False,
-        "consolidated": False,
     },
     "variables": ["var1", "var2"],
 }
@@ -42,9 +31,7 @@ test_pyramid_store_params = {
         "url": test_pyramid_store,
         "variable": "value",
         "decode_times": False,
-        "multiscale": True,
         "group": "2",
-        "consolidated": False,
     },
     "variables": ["value"],
 }
@@ -65,10 +52,6 @@ def test_get_variables_test(app):
     return get_variables_test(app, test_zarr_store_params)
 
 
-def test_get_variables_reference(app):
-    return get_variables_test(app, test_reference_store_params)
-
-
 def test_get_variables_netcdf(app):
     return get_variables_test(app, test_netcdf_store_params)
 
@@ -87,8 +70,9 @@ def get_info_test(app, ds_params):
         params=ds_params["params"],
     )
     assert response.status_code == 200
+    expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_info.json"
     with open(
-        f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_info.json",
+        expectation_fn,
         "r",
     ) as f:
         assert response.json() == json.load(f)
@@ -96,10 +80,6 @@ def get_info_test(app, ds_params):
 
 def test_get_info_test(app):
     return get_info_test(app, test_zarr_store_params)
-
-
-def test_get_info_reference(app):
-    return get_info_test(app, test_reference_store_params)
 
 
 def test_get_info_netcdf(app):
@@ -116,12 +96,14 @@ def test_get_info_pyramid(app):
 
 def get_tilejson_test(app, ds_params):
     response = app.get(
-        "/tilejson.json",
+        "/WebMercatorQuad/tilejson.json",
         params=ds_params["params"],
     )
     assert response.status_code == 200
+    expectation_fn = f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_tilejson.json"
+
     with open(
-        f"{ds_params['params']['url'].replace(DATA_DIR, f'{DATA_DIR}/responses').replace('.', '_')}_tilejson.json",
+        expectation_fn,
         "r",
     ) as f:
         assert response.json() == json.load(f)
@@ -129,10 +111,6 @@ def get_tilejson_test(app, ds_params):
 
 def test_get_tilejson_test(app):
     return get_tilejson_test(app, test_zarr_store_params)
-
-
-def test_get_tilejson_reference(app):
-    return get_tilejson_test(app, test_reference_store_params)
 
 
 def test_get_tilejson_netcdf(app):
@@ -149,7 +127,7 @@ def test_get_tilejson_pyramid(app):
 
 def get_tile_test(app, ds_params, zoom: int = 0):
     response = app.get(
-        f"/tiles/{zoom}/0/0.png",
+        f"/tiles/WebMercatorQuad/{zoom}/0/0.png",
         params=ds_params["params"],
     )
     assert response.status_code == 200
@@ -165,10 +143,6 @@ def test_get_tile_test(app):
     return get_tile_test(app, test_zarr_store_params)
 
 
-def test_get_tile_reference(app):
-    return get_tile_test(app, test_reference_store_params)
-
-
 def test_get_tile_netcdf(app):
     return get_tile_test(app, test_netcdf_store_params)
 
@@ -181,15 +155,6 @@ def test_get_tile_pyramid(app):
     # test that even a group outside of the range will return a tile
     for z in range(3):
         get_tile_test(app, test_pyramid_store_params, zoom=z)
-
-
-def test_get_tile_pyramid_error(app):
-    response = app.get(
-        "/tiles/3/0/0.png",
-        params=test_pyramid_store_params["params"],
-    )
-    assert response.status_code == 422
-    assert response.json() == {"detail": "group not found at path '3'"}
 
 
 def histogram_test(app, ds_params):
@@ -207,10 +172,6 @@ def histogram_test(app, ds_params):
 
 def test_histogram_test(app):
     return histogram_test(app, test_zarr_store_params)
-
-
-def test_histogram_reference(app):
-    return histogram_test(app, test_reference_store_params)
 
 
 def test_histogram_netcdf(app):
@@ -238,21 +199,23 @@ def test_histogram_error(app):
                 "loc": ["query", "variable"],
                 "msg": "Field required",
                 "input": None,
-                "url": "https://errors.pydantic.dev/2.1.2/v/missing",
+                "url": "https://errors.pydantic.dev/2.10/v/missing",
             }
         ]
     }
 
 
 def test_map_without_params(app):
-    response = app.get("/map")
+    response = app.get("/WebMercatorQuad/map")
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, "Step 1: Enter the URL of your Zarr store")
 
 
 def test_map_with_params(app):
-    response = app.get("/map", params={"url": test_zarr_store, "variable": "CDD0"})
+    response = app.get(
+        "/WebMercatorQuad/map", params={"url": test_zarr_store, "variable": "CDD0"}
+    )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, "<div id='map' class=\"hidden\"></div>")
