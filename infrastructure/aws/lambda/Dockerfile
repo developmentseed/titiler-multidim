@@ -19,7 +19,7 @@ COPY src/titiler/ src/titiler/
 # and becaise we NEED to remove both boto3 and botocore to save space for the package
 # we have to force using old package version that seems `almost` compatible with Lambda env botocore
 # https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html
-RUN uv pip install --system .   "mangum>=0.10.0" "botocore==1.29.76" "aiobotocore==2.5.0" --target /asset --no-binary pydantic
+RUN uv pip install --compile-bytecode . "mangum>=0.10.0" "botocore==1.29.76" "aiobotocore==2.5.0" --target /asset --no-binary pydantic
 
 # Reduce package size and remove useless files
 RUN cd /asset && find . -type f -name '*.pyc' | while read f; do n=$(echo $f | sed 's/__pycache__\///' | sed 's/.cpython-[0-9]*//'); cp $f $n; done;
