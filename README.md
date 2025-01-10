@@ -29,6 +29,7 @@ Install the package using [`uv`](https://docs.astral.sh/uv/getting-started/insta
 
 ```bash
 uv sync
+uv run pre-commit install
 ```
 
 To run all the tests:
