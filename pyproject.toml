@@ -28,43 +28,43 @@ dependencies = [
     "titiler.core>=0.19.0,<0.20",
     "titiler.xarray>=0.19.0,<0.20",
     "cftime",
-    "h5netcdf",
-    "numpy<2.0.0",
-    "xarray",
-    "rioxarray",
-    "zarr>=2,<3",
-    "fakeredis",
+    "fastapi",
     "fsspec",
-    "s3fs",
-    "aiohttp",
-    "requests",
+    "h5netcdf",
+    "numpy",
     "pydantic-settings~=2.0",
     "pydantic>=2.4,<3.0",
-    "pandas==1.5.3",
     "redis",
-    "fastapi>=0.108.0,<0.109.0",
-    "starlette>=0.29.0,<0.33.0",
+    "rioxarray",
+    "s3fs",
+    "xarray",
+    "zarr>=2,<3",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "httpx<0.28",
-    "yappi",
-]
-dev = [
-    "dask>=2023.5.0",
-    "ipython>=8.12.3",
-    "netcdf4>=1.7.2",
-    "pre-commit",
-]
-debug = [
-    "yappi"
-]
 server = [
     "uvicorn"
+]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.23.5",
+    "httpx",
+    "ipython>=8.12.3",
+    "netcdf4>=1.7.2",
+    "pre-commit>=3.5.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "pytest>=8.3.2",
+    "yappi>=1.6.0",
+]
+deployment = [
+    "aws-cdk-aws-apigatewayv2-alpha==2.76.0a0",
+    "aws-cdk-aws-apigatewayv2-integrations-alpha==2.76.0a0",
+    "aws-cdk-lib==2.76.0",
+    "constructs>=10.4.2",
+    "pydantic-settings~=2.0",
+    "python-dotenv>=1.0.1",
 ]
 
 [project.urls]
@@ -117,6 +117,7 @@ explicit_package_bases = true
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
 
 
 [tool.pdm.version]

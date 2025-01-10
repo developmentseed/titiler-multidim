@@ -2,18 +2,18 @@
 
 from typing import Dict, List, Optional
 
-import pydantic
+from pydantic_settings import BaseSettings
 
 
-class StackSettings(pydantic.BaseSettings):
+class StackSettings(BaseSettings):
     """Application settings"""
 
     name: str = "titiler-xarray"
     stage: str = "production"
 
-    owner: Optional[str]
-    client: Optional[str]
-    project: Optional[str]
+    owner: Optional[str] = None
+    client: Optional[str] = None
+    project: Optional[str] = None
 
     additional_env: Dict = {}
 
@@ -31,7 +31,7 @@ class StackSettings(pydantic.BaseSettings):
 
     # The maximum of concurrent executions you want to reserve for the function.
     # Default: - No specific limit - account limit.
-    max_concurrent: Optional[int]
+    max_concurrent: Optional[int] = None
     alarm_email: Optional[str] = ""
 
     class Config:
