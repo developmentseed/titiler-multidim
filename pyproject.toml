@@ -32,7 +32,7 @@ dependencies = [
     "numpy<2.0.0",
     "xarray",
     "rioxarray",
-    "zarr",
+    "zarr>=2,<3",
     "fakeredis",
     "fsspec",
     "s3fs",
