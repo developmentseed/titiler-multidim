@@ -1,4 +1,4 @@
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 
 FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -29,6 +29,12 @@ RUN find /asset -type d -a -name 'tests' -print0 | xargs -0 rm -rf
 RUN rm -rdf /asset/numpy/doc/ /asset/bin /asset/geos_license /asset/Misc
 RUN rm -rdf /asset/boto3*
 RUN rm -rdf /asset/botocore*
+
+# Strip debug symbols from compiled C/C++ code (except for numpy.libs!)
+RUN cd /asset && \
+  find . -type f -name '*.so*' \
+  -not -path "./numpy.libs/*" \
+  -exec strip --strip-unneeded {} \;
 
 COPY infrastructure/aws/lambda/handler.py /asset/handler.py
 
