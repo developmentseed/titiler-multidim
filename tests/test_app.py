@@ -199,7 +199,6 @@ def test_histogram_error(app):
                 "loc": ["query", "variable"],
                 "msg": "Field required",
                 "input": None,
-                "url": "https://errors.pydantic.dev/2.10/v/missing",
             }
         ]
     }
