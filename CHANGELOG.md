@@ -7,6 +7,9 @@
 * Drop support for kerchunk reference files ([#72](https://github.com/developmentseed/titiler-xarray/pull/72)) **breaking change**
 * Drop support for experimental `multiscale` zarr group zoom level functionality ([#72](https://github.com/developmentseed/titiler-xarray/pull/72)) **breaking change**
 * Remove default `WebMercatorQuad` tile matrix set in `/tiles`, `/tilesjson.json`, `/map` and `/WMTSCapabilities.xml` endpoints (with upgrade to `titiler.core>=0.19`) **breaking change**
+* Use `uv` for managing dependencies [#74](https://github.com/developmentseed/titiler-xarray/pull/74)
+* Slim down the Lambda asset package size [#74](https://github.com/developmentseed/titiler-xarray/pull/74)
+  * run `strip` on compiled C/C++ extensions (except `numpy.libs`)
 
 ## v0.2.0
 
