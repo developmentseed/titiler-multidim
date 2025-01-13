@@ -27,6 +27,7 @@ dynamic = ["version"]
 dependencies = [
     "titiler.core>=0.19.0,<0.20",
     "titiler.xarray>=0.19.0,<0.20",
+    "aiohttp",
     "cftime",
     "fastapi",
     "fsspec",
@@ -35,6 +36,7 @@ dependencies = [
     "pydantic-settings~=2.0",
     "pydantic>=2.4,<3.0",
     "redis",
+    "requests",
     "rioxarray",
     "s3fs",
     "xarray",
