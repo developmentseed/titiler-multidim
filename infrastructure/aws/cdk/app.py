@@ -116,6 +116,9 @@ class LambdaStack(Stack):
                 path=os.path.abspath(context_dir),
                 file="infrastructure/aws/lambda/Dockerfile",
                 platform="linux/amd64",
+                build_args={
+                    "PYTHON_VERSION": runtime.to_string().replace("python", ""),
+                },
             ),
             handler="handler.handler",
             memory_size=memory,
