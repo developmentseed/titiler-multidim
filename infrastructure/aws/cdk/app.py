@@ -56,16 +56,23 @@ class LambdaStack(Stack):
         permissions = permissions or []
         environment = environment or {}
 
-        vpc = ec2.Vpc(
-            self,
-            f"{id}-vpc",
-            max_azs=2,
-            subnet_configuration=[
-                ec2.SubnetConfiguration(
-                    name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
-                )
-            ],
-        )
+        if settings.vpc_id:
+            vpc = ec2.Vpc.from_lookup(
+                self,
+                f"{id}-vpc",
+                vpc_id=settings.vpc_id,
+            )
+        else:
+            vpc = ec2.Vpc(
+                self,
+                f"{id}-vpc",
+                max_azs=2,
+                subnet_configuration=[
+                    ec2.SubnetConfiguration(
+                        name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
+                    )
+                ],
+            )
 
         security_group = ec2.SecurityGroup(
             self,

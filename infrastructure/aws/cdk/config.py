@@ -18,6 +18,10 @@ class StackSettings(BaseSettings):
     reader_role_arn: Annotated[
         str, "arn for IAM role with priveleges required for reading data"
     ]
+    vpc_id: Annotated[
+        Optional[str],
+        "VPC id to use for this stack, will create a new one if not provide",
+    ] = None
 
     additional_env: Dict = {}
 
