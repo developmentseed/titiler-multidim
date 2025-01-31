@@ -54,8 +54,8 @@ runs:
         fi
 
     - name: Deploy
-      id: deploy_auth_stack
+      id: deploy_titiler_xarray_stack
       shell: bash
       working-directory: ${{ inputs.dir }}
       run: |
-        cdk deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json
+        uv run cdk deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json
