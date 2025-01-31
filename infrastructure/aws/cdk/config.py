@@ -1,6 +1,6 @@
 """STACK Configs."""
 
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Optional
 
 from pydantic_settings import BaseSettings
 
@@ -14,6 +14,10 @@ class StackSettings(BaseSettings):
     owner: Optional[str] = None
     client: Optional[str] = None
     project: Optional[str] = None
+
+    reader_role_arn: Annotated[
+        str, "arn for IAM role with priveleges required for reading data"
+    ]
 
     additional_env: Dict = {}
 

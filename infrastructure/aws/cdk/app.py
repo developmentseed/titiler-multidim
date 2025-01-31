@@ -104,8 +104,8 @@ class LambdaStack(Stack):
 
         veda_reader_role = iam.Role.from_role_arn(
             self,
-            "veda-reader-dev-role",
-            role_arn=f"arn:aws:iam::{self.account}:role/veda-data-reader-dev",
+            "reader-role",
+            role_arn=settings.reader_role_arn,
         )
 
         lambda_function = aws_lambda.Function(
