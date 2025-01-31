@@ -30,11 +30,13 @@ runs:
       run: npm install -g aws-cdk@2
 
     - name: Install uv
+      shell: bash
       uses: astral-sh/setup-uv@v3
       with:
         version: "0.5.*" 
 
     - name: Install dependencies
+      shell: bash
       working-directory: ${{ inputs.dir }}
       run: |
         uv sync --only-group deployment
