@@ -52,6 +52,7 @@ runs:
         else
         python ${{ inputs.script_path }} --secret-id ${{ inputs.env_aws_secret_name }}
         fi
+        cat .env
 
     - name: Deploy
       id: deploy_titiler_xarray_stack
