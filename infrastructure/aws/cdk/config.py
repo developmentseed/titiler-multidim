@@ -51,6 +51,17 @@ class StackSettings(BaseSettings):
     max_concurrent: Optional[int] = None
     alarm_email: Optional[str] = ""
 
+    def cdk_env(self) -> dict:
+        """Load a cdk environment dict for stack"""
+
+        if self.vpc_id:
+            return {
+                "account": self.cdk_default_account,
+                "region": self.cdk_default_region,
+            }
+        else:
+            return {}
+
     class Config:
         """model config"""
 

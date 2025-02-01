@@ -61,8 +61,6 @@ class LambdaStack(Stack):
                 self,
                 f"{id}-vpc",
                 vpc_id=settings.vpc_id,
-                owner_account_id=settings.cdk_default_account,
-                region=settings.cdk_default_region,
             )
         else:
             vpc = ec2.Vpc(
@@ -216,6 +214,7 @@ lambda_stack = LambdaStack(
     concurrent=settings.max_concurrent,
     permissions=perms,
     environment=settings.additional_env,
+    env=settings.cdk_env(),  # deploy env settings (account, region)
 )
 # Tag infrastructure
 for key, value in {
