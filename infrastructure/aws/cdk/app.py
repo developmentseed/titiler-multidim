@@ -61,8 +61,8 @@ class LambdaStack(Stack):
                 self,
                 f"{id}-vpc",
                 vpc_id=settings.vpc_id,
-                owner_account_id=Stack.of(self).account,
-                region=Stack.of(self).region,
+                owner_account_id=settings.cdk_default_account,
+                region=settings.cdk_default_region,
             )
         else:
             vpc = ec2.Vpc(

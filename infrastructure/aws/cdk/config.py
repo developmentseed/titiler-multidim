@@ -2,6 +2,7 @@
 
 from typing import Annotated, Dict, List, Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -23,6 +24,14 @@ class StackSettings(BaseSettings):
         "VPC id to use for this stack, will create a new one if not provide",
     ] = None
 
+    cdk_default_account: Optional[str] = Field(
+        None,
+        description="When deploying from a local machine the AWS account id is required to deploy to an existing VPC",
+    )
+    cdk_default_region: Optional[str] = Field(
+        None,
+        description="When deploying from a local machine the AWS region id is required to deploy to an existing VPC",
+    )
     additional_env: Dict = {}
 
     # S3 bucket names where TiTiler could do HEAD and GET Requests
