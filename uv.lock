@@ -248,68 +248,50 @@ wheels = [
 ]
 
 [[package]]
-name = "aws-cdk-asset-node-proxy-agent-v5"
-version = "2.0.166"
+name = "aws-cdk-asset-node-proxy-agent-v6"
+version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsii" },
     { name = "publication" },
     { name = "typeguard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/ce/f19cfe99e5e87419c70dc68305763eda5f530e8bcf45e2507017f9f7a027/aws-cdk.asset-node-proxy-agent-v5-2.0.166.tar.gz", hash = "sha256:73d4a4f4bdeb3019779137e4b18d7c5efc8353dff673508bd8c584569ea18db6", size = 1333721 }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/ab/09ac3ecc0067988d02398328e088d66cbe8555c991563c8ddfa1db5296ae/aws_cdk_asset_node_proxy_agent_v6-2.1.0.tar.gz", hash = "sha256:1f292c0631f86708ba4ee328b3a2b229f7e46ea1c79fbde567ee9eb119c2b0e2", size = 1540231 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/75/d20fd97b800f8eaf7b4caf95222b1767626aeeb0f5a9a01bd636e41585d1/aws_cdk.asset_node_proxy_agent_v5-2.0.166-py3-none-any.whl", hash = "sha256:d71d80710734c47f7114e3e51843c4a8ebae3bbe5032a5af40ca56ca611c0cfe", size = 1332463 },
+    { url = "https://files.pythonhosted.org/packages/8d/86/1817a6da223aa80aeb94a504f07f930170284694b18f6053729e9930cc6a/aws_cdk.asset_node_proxy_agent_v6-2.1.0-py3-none-any.whl", hash = "sha256:24a388b69a44d03bae6dbf864c4e25ba650d4b61c008b4568b94ffbb9a69e40e", size = 1538724 },
 ]
 
 [[package]]
-name = "aws-cdk-aws-apigatewayv2-alpha"
-version = "2.76.0a0"
+name = "aws-cdk-cloud-assembly-schema"
+version = "39.2.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aws-cdk-lib" },
-    { name = "constructs" },
     { name = "jsii" },
     { name = "publication" },
     { name = "typeguard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/19/38/04d64f581837f628a2388576a5d50d731cae77ab87c40bbba007829e2c0d/aws-cdk.aws-apigatewayv2-alpha-2.76.0a0.tar.gz", hash = "sha256:fc959196bf38ba2b73dbe1238b19654251eab89069a0f59571d3a662fbdd590e", size = 248394 }
+sdist = { url = "https://files.pythonhosted.org/packages/45/b3/f0fe3378daf509089bb801f69e771abf221c7953754873e29489e655537d/aws_cdk_cloud_assembly_schema-39.2.12.tar.gz", hash = "sha256:4ce66f5ff7e64b7a0e661ede07831ec87dc3d76cd81d9931ea0bb5fa6e9b01b9", size = 188267 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/c1/ad5bbe23ef64d7e299281187ff52676eb7372fded903811cd171f664b57c/aws_cdk.aws_apigatewayv2_alpha-2.76.0a0-py3-none-any.whl", hash = "sha256:1156f83a749be67e91dab1fa657ca946c99bfd443c39e8f6f0e029b08672bf94", size = 247393 },
-]
-
-[[package]]
-name = "aws-cdk-aws-apigatewayv2-integrations-alpha"
-version = "2.76.0a0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aws-cdk-aws-apigatewayv2-alpha" },
-    { name = "aws-cdk-lib" },
-    { name = "constructs" },
-    { name = "jsii" },
-    { name = "publication" },
-    { name = "typeguard" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/13/3e21ad01a5bd21e2bae180dcbd58afe9c09613b357455fe383ef41e05208/aws-cdk.aws-apigatewayv2-integrations-alpha-2.76.0a0.tar.gz", hash = "sha256:336b307bf7ad979ea251f29343b43e468539e1c984ea1ebf3b6b6c355ef31272", size = 66709 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/fc/600f03e52b2c5ed506b7493b3eaf734aee678579c8c7e4cd8774bb548dcb/aws_cdk.aws_apigatewayv2_integrations_alpha-2.76.0a0-py3-none-any.whl", hash = "sha256:7dd56e1d081948e7a92ff7d9093d1493f33c56f123574a3bcbbe99a523928896", size = 65498 },
+    { url = "https://files.pythonhosted.org/packages/ca/a6/062afa88b088c8f572c8dbac079f0710f90a3c8752765cc7bf1481539449/aws_cdk.cloud_assembly_schema-39.2.12-py3-none-any.whl", hash = "sha256:405fb9b19b4c2ceb320a81f5605e827d1730a0349eeb1cde64c6fc3500580d8c", size = 187251 },
 ]
 
 [[package]]
 name = "aws-cdk-lib"
-version = "2.76.0"
+version = "2.177.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aws-cdk-asset-awscli-v1" },
     { name = "aws-cdk-asset-kubectl-v20" },
-    { name = "aws-cdk-asset-node-proxy-agent-v5" },
+    { name = "aws-cdk-asset-node-proxy-agent-v6" },
+    { name = "aws-cdk-cloud-assembly-schema" },
     { name = "constructs" },
     { name = "jsii" },
     { name = "publication" },
     { name = "typeguard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/43/e87c1dda2a03020539704d4547e7d1630324af3991ee0722e1830096a08b/aws-cdk-lib-2.76.0.tar.gz", hash = "sha256:988fe73c5e555487788b1c66badbcf3885081bf7bc8111373ca2d86b60680bd0", size = 59135732 }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/bf/47c3c59636645d77ea1021bd2ffacba139165bebe4568c75a5248b740d84/aws_cdk_lib-2.177.0.tar.gz", hash = "sha256:5e51c48da31555beb38243bb2882e98ee9fe1796466ba9f8d3088701b47965e5", size = 38723662 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/a2/df9832b783462deee8e8bb9e9da315794efe34f378d097d26b2cafb3b408/aws_cdk_lib-2.76.0-py3-none-any.whl", hash = "sha256:59575b5ee0fee4925f12b6cb8d832c05346b6531e606d4c4d449e97c118597f8", size = 59565895 },
+    { url = "https://files.pythonhosted.org/packages/fb/13/5875ae6d2fdbc4aea5650fc2fb89767cd4d7eeda1dcc9a449d904e47eff3/aws_cdk_lib-2.177.0-py3-none-any.whl", hash = "sha256:acdf06aaf52367a64b4bf88381e8272cb7b5961c242020ace822c79749e53cac", size = 39000486 },
 ]
 
 [[package]]
@@ -2499,8 +2481,6 @@ server = [
 
 [package.dev-dependencies]
 deployment = [
-    { name = "aws-cdk-aws-apigatewayv2-alpha" },
-    { name = "aws-cdk-aws-apigatewayv2-integrations-alpha" },
     { name = "aws-cdk-lib" },
     { name = "constructs" },
     { name = "pydantic-settings" },
@@ -2542,9 +2522,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 deployment = [
-    { name = "aws-cdk-aws-apigatewayv2-alpha", specifier = "==2.76.0a0" },
-    { name = "aws-cdk-aws-apigatewayv2-integrations-alpha", specifier = "==2.76.0a0" },
-    { name = "aws-cdk-lib", specifier = "==2.76.0" },
+    { name = "aws-cdk-lib", specifier = "~=2.177.0" },
     { name = "constructs", specifier = ">=10.4.2" },
     { name = "pydantic-settings", specifier = "~=2.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
