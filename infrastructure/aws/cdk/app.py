@@ -74,6 +74,13 @@ class LambdaStack(Stack):
                 ],
             )
 
+            ec2.GatewayVpcEndpoint(
+                self,
+                f"{id}-s3-vpc-endpoint",
+                vpc=vpc,
+                service=ec2.GatewayVpcEndpointAwsService.S3,
+            )
+
         security_group = ec2.SecurityGroup(
             self,
             "ElastiCacheSecurityGroup",
@@ -141,14 +148,6 @@ class LambdaStack(Stack):
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
-        )
-
-        # Create an S3 VPC Endpoint
-        ec2.GatewayVpcEndpoint(
-            self,
-            f"{id}-s3-vpc-endpoint",
-            vpc=vpc,
-            service=ec2.GatewayVpcEndpointAwsService.S3,
         )
 
         for perm in permissions:
