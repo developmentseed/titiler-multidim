@@ -60,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       UV_PYTHON: 3.12
+      STACK_READER_ROLE_ARN: ${{ secrets.READER_ROLE_ARN }}
+      STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
   
     defaults:
       run:
@@ -116,9 +118,7 @@ jobs:
         env:
           TITILER_MULTIDIM_PYTHONWARNINGS: ignore
           TITILER_MULTIDIM_DEBUG: True
-          STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
           STACK_STAGE: development
-          STACK_READER_ROLE_ARN: ${{ secrets.READER_ROLE_ARN }}
           
       # Build and deploy to production deployment whenever there a new tag is pushed
       - name: Build & Deploy Production
@@ -127,6 +127,4 @@ jobs:
         env:
           TITILER_MULTIDIM_PYTHONWARNINGS: ignore
           TITILER_MULTIDIM_DEBUG: True
-          STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
           STACK_STAGE: production
-          STACK_READER_ROLE_ARN: ${{ secrets.READER_ROLE_ARN }}
