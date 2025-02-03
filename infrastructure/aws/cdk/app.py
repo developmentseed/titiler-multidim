@@ -140,7 +140,7 @@ class LambdaStack(Stack):
             environment={
                 **DEFAULT_ENV,
                 **environment,
-                "TITILER_XARRAY_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+                "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
@@ -212,7 +212,7 @@ lambda_stack = LambdaStack(
     concurrent=settings.max_concurrent,
     permissions=perms,
     environment=settings.additional_env,
-    env=settings.cdk_env(),  # deploy env settings (account, region)
+    env=settings.cdk_env(),  # deploy env settings (account, region) passed to Stack.__init__()
 )
 # Tag infrastructure
 for key, value in {

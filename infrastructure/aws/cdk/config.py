@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 class StackSettings(BaseSettings):
     """Application settings"""
 
-    name: str = "titiler-xarray"
+    name: str = "titiler-multidim"
     stage: str = "production"
 
     owner: Optional[str] = None
