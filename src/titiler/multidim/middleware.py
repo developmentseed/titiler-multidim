@@ -65,9 +65,9 @@ class ServerTimingMiddleware:
                 profiler memory gets cleared.
 
         """
-        assert (
-            yappi is not None
-        ), "yappi must be installed to use ServerTimingMiddleware"
+        assert yappi is not None, (
+            "yappi must be installed to use ServerTimingMiddleware"
+        )
 
         for metric_name, profiled_functions in calls_to_track.items():
             if len(metric_name) == 0:
