@@ -18,7 +18,7 @@ on:
   # Run tests on pull requests.
   pull_request:
 env:
-  LATEST_PY_VERSION: '3.10'
+  LATEST_PY_VERSION: '3.12'
 
 permissions:
   id-token: write   # This is required for requesting the JWT
