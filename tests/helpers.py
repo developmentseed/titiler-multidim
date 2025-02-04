@@ -1,4 +1,5 @@
-""" Functions to simplify writing tests. """
+"""Functions to simplify writing tests."""
+
 import httpx
 
 

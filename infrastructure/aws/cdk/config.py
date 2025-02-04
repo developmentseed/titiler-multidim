@@ -1,20 +1,37 @@
 """STACK Configs."""
 
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Optional
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class StackSettings(BaseSettings):
     """Application settings"""
 
-    name: str = "titiler-xarray"
+    name: str = "titiler-multidim"
     stage: str = "production"
 
     owner: Optional[str] = None
     client: Optional[str] = None
     project: Optional[str] = None
 
+    reader_role_arn: Annotated[
+        str, "arn for IAM role with priveleges required for reading data"
+    ]
+    vpc_id: Annotated[
+        Optional[str],
+        "VPC id to use for this stack, will create a new one if not provide",
+    ] = None
+
+    cdk_default_account: Optional[str] = Field(
+        None,
+        description="When deploying from a local machine the AWS account id is required to deploy to an existing VPC",
+    )
+    cdk_default_region: Optional[str] = Field(
+        None,
+        description="When deploying from a local machine the AWS region id is required to deploy to an existing VPC",
+    )
     additional_env: Dict = {}
 
     # S3 bucket names where TiTiler could do HEAD and GET Requests
@@ -33,6 +50,17 @@ class StackSettings(BaseSettings):
     # Default: - No specific limit - account limit.
     max_concurrent: Optional[int] = None
     alarm_email: Optional[str] = ""
+
+    def cdk_env(self) -> dict:
+        """Load a cdk environment dict for stack"""
+
+        if self.vpc_id:
+            return {
+                "account": self.cdk_default_account,
+                "region": self.cdk_default_region,
+            }
+        else:
+            return {}
 
     class Config:
         """model config"""

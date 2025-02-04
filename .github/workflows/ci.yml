@@ -18,7 +18,7 @@ on:
   # Run tests on pull requests.
   pull_request:
 env:
-  LATEST_PY_VERSION: '3.10'
+  LATEST_PY_VERSION: '3.12'
 
 permissions:
   id-token: write   # This is required for requesting the JWT
@@ -60,6 +60,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       UV_PYTHON: 3.12
+      STACK_READER_ROLE_ARN: ${{ secrets.READER_ROLE_ARN }}
+      STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
   
     defaults:
       run:
@@ -69,16 +71,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::444055461661:role/github-actions-role-eodc
           role-session-name: samplerolesession
           aws-region: us-west-2
 
-      - name: Set up node
-        uses: actions/setup-node@v2
+      - name: Install node and related deps
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -114,9 +116,8 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
         run: uv run npm run cdk -- deploy titiler-xarray-development --require-approval never
         env:
-          TITILER_XARRAY_PYTHONWARNINGS: ignore
-          TITILER_XARRAY_DEBUG: True
-          STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+          TITILER_MULTIDIM_PYTHONWARNINGS: ignore
+          TITILER_MULTIDIM_DEBUG: True
           STACK_STAGE: development
           
       # Build and deploy to production deployment whenever there a new tag is pushed
@@ -124,7 +125,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: uv run npm run cdk -- deploy titiler-xarray-production --require-approval never
         env:
-          TITILER_XARRAY_PYTHONWARNINGS: ignore
-          TITILER_XARRAY_DEBUG: True
-          STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+          TITILER_MULTIDIM_PYTHONWARNINGS: ignore
+          TITILER_MULTIDIM_DEBUG: True
           STACK_STAGE: production

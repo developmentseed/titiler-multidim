@@ -1,0 +1,61 @@
+name: Deploy
+
+inputs:
+  env_aws_secret_name:
+    required: true
+    type: string
+  dir:
+    required: false
+    type: string
+    default: "."
+  script_path:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install node and related deps
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Install AWS CDK
+      shell: bash
+      run: npm install -g aws-cdk@2
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.*" 
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        uv sync --only-group deployment
+        uv run npm install
+
+    - name: Get relevant environment configuration from aws secrets
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      env:
+        AWS_DEFAULT_REGION: us-west-2
+      run: |
+        if [[ -z "${{ inputs.script_path }}" ]]; then
+        ./scripts/sync-env.sh ${{ inputs.env_aws_secret_name }}
+        else
+        python ${{ inputs.script_path }} --secret-id ${{ inputs.env_aws_secret_name }}
+        fi
+
+    - name: Deploy
+      id: deploy_titiler_xarray_stack
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        uv run cdk deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json

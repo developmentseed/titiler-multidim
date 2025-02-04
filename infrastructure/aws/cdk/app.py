@@ -3,18 +3,17 @@
 import os
 from typing import Any, Dict, List, Optional
 
-from aws_cdk import App, CfnOutput, Duration, Stack, Tags
-from aws_cdk import aws_apigatewayv2_alpha as apigw
+from aws_cdk import App, CfnOutput, Duration, Stack, Tags, aws_lambda
+from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_elasticache as elasticache
 from aws_cdk import aws_iam as iam
-from aws_cdk import aws_lambda
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
-from aws_cdk.aws_apigatewayv2_integrations_alpha import HttpLambdaIntegration
+from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
 from config import StackSettings
 from constructs import Construct
 
@@ -51,21 +50,35 @@ class LambdaStack(Stack):
         **kwargs: Any,
     ) -> None:
         """Define stack."""
-        super().__init__(scope, id, *kwargs)
+        super().__init__(scope, id, **kwargs)
 
         permissions = permissions or []
         environment = environment or {}
 
-        vpc = ec2.Vpc(
-            self,
-            f"{id}-vpc",
-            max_azs=2,
-            subnet_configuration=[
-                ec2.SubnetConfiguration(
-                    name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
-                )
-            ],
-        )
+        if settings.vpc_id:
+            vpc = ec2.Vpc.from_lookup(
+                self,
+                f"{id}-vpc",
+                vpc_id=settings.vpc_id,
+            )
+        else:
+            vpc = ec2.Vpc(
+                self,
+                f"{id}-vpc",
+                max_azs=2,
+                subnet_configuration=[
+                    ec2.SubnetConfiguration(
+                        name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
+                    )
+                ],
+            )
+
+            ec2.GatewayVpcEndpoint(
+                self,
+                f"{id}-s3-vpc-endpoint",
+                vpc=vpc,
+                service=ec2.GatewayVpcEndpointAwsService.S3,
+            )
 
         security_group = ec2.SecurityGroup(
             self,
@@ -104,8 +117,8 @@ class LambdaStack(Stack):
 
         veda_reader_role = iam.Role.from_role_arn(
             self,
-            "veda-reader-dev-role",
-            role_arn=f"arn:aws:iam::{self.account}:role/veda-data-reader-dev",
+            "reader-role",
+            role_arn=settings.reader_role_arn,
         )
 
         lambda_function = aws_lambda.Function(
@@ -127,21 +140,13 @@ class LambdaStack(Stack):
             environment={
                 **DEFAULT_ENV,
                 **environment,
-                "TITILER_XARRAY_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+                "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
-        )
-
-        # Create an S3 VPC Endpoint
-        ec2.GatewayVpcEndpoint(
-            self,
-            f"{id}-s3-vpc-endpoint",
-            vpc=vpc,
-            service=ec2.GatewayVpcEndpointAwsService.S3,
         )
 
         for perm in permissions:
@@ -207,6 +212,7 @@ lambda_stack = LambdaStack(
     concurrent=settings.max_concurrent,
     permissions=perms,
     environment=settings.additional_env,
+    env=settings.cdk_env(),  # deploy env settings (account, region) passed to Stack.__init__()
 )
 # Tag infrastructure
 for key, value in {
