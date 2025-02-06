@@ -114,17 +114,19 @@ jobs:
       # Build and deploy to the development environment whenever there is a push to main or dev
       - name: Build & Deploy Development
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-        run: uv run npm run cdk -- deploy titiler-xarray-development --require-approval never
+        run: uv run npm run cdk -- deploy titiler-multidim-development --require-approval never
         env:
           TITILER_MULTIDIM_PYTHONWARNINGS: ignore
           TITILER_MULTIDIM_DEBUG: True
           STACK_STAGE: development
+          STACK_NAME: titiler-multidim
           
       # Build and deploy to production deployment whenever there a new tag is pushed
       - name: Build & Deploy Production
         if: startsWith(github.ref, 'refs/tags/v')
-        run: uv run npm run cdk -- deploy titiler-xarray-production --require-approval never
+        run: uv run npm run cdk -- deploy titiler-multidim-production --require-approval never
         env:
           TITILER_MULTIDIM_PYTHONWARNINGS: ignore
           TITILER_MULTIDIM_DEBUG: True
           STACK_STAGE: production
+          STACK_NAME: titiler-multidim
