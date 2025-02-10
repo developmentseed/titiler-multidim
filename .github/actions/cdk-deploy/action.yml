@@ -2,15 +2,17 @@ name: Deploy
 
 inputs:
   env_aws_secret_name:
-    required: true
+    required: false
     type: string
+    default: ''
   dir:
     required: false
     type: string
     default: "."
   script_path:
-    required: true
+    required: false
     type: string
+    default: ''
 
 runs:
   using: "composite"
@@ -42,6 +44,7 @@ runs:
         uv run npm install
 
     - name: Get relevant environment configuration from aws secrets
+      if: inputs.env_aws_secret_name != ''
       shell: bash
       working-directory: ${{ inputs.dir }}
       env:
@@ -53,8 +56,30 @@ runs:
         python ${{ inputs.script_path }} --secret-id ${{ inputs.env_aws_secret_name }}
         fi
 
+    - name: CDK Synth
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: uv run --only-group deployment npm run cdk -- synth
+
+    - name: Check Asset Sizes
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        MAX_SIZE_BYTES=262144000  # 262 MB in bytes
+        for dir in cdk.out/asset.*; do
+          if [ -d "$dir" ]; then
+            size=$(du -sb "$dir" | cut -f1)
+            if [ "$size" -gt $MAX_SIZE_BYTES ]; then
+              echo "Directory $dir exceeds 262 MB with size $size bytes (max: $MAX_SIZE_BYTES bytes)."
+              exit 1
+            fi
+            echo "Asset directory $dir size: $size bytes"
+          fi
+        done
+        echo "All asset directories are within size limits."
+
     - name: Deploy
-      id: deploy_titiler_xarray_stack
+      id: deploy_titiler_multidim_stack
       shell: bash
       working-directory: ${{ inputs.dir }}
       run: |
