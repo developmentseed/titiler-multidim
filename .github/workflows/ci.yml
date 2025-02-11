@@ -54,6 +54,41 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+  cdk-checks:
+    needs: [tests]
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.event_name == 'pull_request'
+    env:
+      UV_PYTHON: 3.12
+      TITILER_MULTIDIM_PYTHONWARNINGS: ignore
+      TITILER_MULTIDIM_DEBUG: true
+      STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
+      STACK_CDK_DEFAULT_ACCOUNT: ${{ vars.STACK_CDK_DEFAULT_ACCOUNT }}
+      STACK_CDK_DEFAULT_REGION: ${{ vars.STACK_CDK_DEFAULT_REGION }}
+      STACK_READER_ROLE_ARN: ${{ vars.STACK_READER_ROLE_ARN }}
+      STACK_STAGE: ${{ vars.STACK_STAGE }}
+      STACK_VPC_ID: ${{ vars.STACK_VPD_ID }}
+  
+    defaults:
+      run:
+        working-directory: infrastructure/aws
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-actions-pr
+          aws-region: ${{ vars.STACK_CDK_DEFAULT_REGION }}
+
+      - uses: ./.github/actions/cdk-deploy
+        with:
+          dir: 'infrastructure/aws'
+          skip_deploy: true
+
   deploy-development:
     needs: [tests]
     runs-on: ubuntu-latest
@@ -87,6 +122,7 @@ jobs:
       - uses: ./.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
+          skip_deploy: false
 
   deploy-production:
     needs: [tests]
@@ -121,3 +157,4 @@ jobs:
       - uses: ./.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
+          skip_deploy: false
