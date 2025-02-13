@@ -68,7 +68,7 @@ jobs:
       STACK_CDK_DEFAULT_REGION: ${{ vars.STACK_CDK_DEFAULT_REGION }}
       STACK_READER_ROLE_ARN: ${{ vars.STACK_READER_ROLE_ARN }}
       STACK_STAGE: ${{ vars.STACK_STAGE }}
-      STACK_VPC_ID: ${{ vars.STACK_VPD_ID }}
+      STACK_VPC_ID: ${{ vars.STACK_VPC_ID }}
   
     defaults:
       run:
@@ -103,7 +103,7 @@ jobs:
       STACK_CDK_DEFAULT_REGION: ${{ vars.STACK_CDK_DEFAULT_REGION }}
       STACK_READER_ROLE_ARN: ${{ vars.STACK_READER_ROLE_ARN }}
       STACK_STAGE: ${{ vars.STACK_STAGE }}
-      STACK_VPC_ID: ${{ vars.STACK_VPD_ID }}
+      STACK_VPC_ID: ${{ vars.STACK_VPC_ID }}
   
     defaults:
       run:
@@ -138,7 +138,7 @@ jobs:
       STACK_CDK_DEFAULT_REGION: ${{ vars.STACK_CDK_DEFAULT_REGION }}
       STACK_READER_ROLE_ARN: ${{ vars.STACK_READER_ROLE_ARN }}
       STACK_STAGE: ${{ vars.STACK_STAGE }}
-      STACK_VPC_ID: ${{ vars.STACK_VPD_ID }}
+      STACK_VPC_ID: ${{ vars.STACK_VPC_ID }}
   
     defaults:
       run:
