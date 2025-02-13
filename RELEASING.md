@@ -1,23 +1,16 @@
 # Releasing
 
-This repository deploys to 2 stacks (one production and one development) via github actions. These deployments are intended to be services in beta for demonstration in [NASA's VEDA project](https://www.earthdata.nasa.gov/esds/veda).
-
-The production stack will be deployed when main is tagged (aka "released"). The production stack has the domain https://prod-titiler-xarray.delta-backend.com.
-
-The development stack will be deployed upon pushes to the dev and main branches. The development stack will have the domain https://dev-titiler-xarray.delta-backend.com.
+Deploying titiler-multidim to VEDA environments is configured and executed via the [veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repo.
 
 ## Release Workflow:
 
-### Pre-release steps
-1. PRs are made to `dev` branch. PRs should include tests and documentation. pytest should succeed before merging. If appropriate, changes should be added to the CHANGELOG.md file under "Next release".
-2. Once merged, https://dev-titiler-xarray.delta-backend.com will be deployed and should be manually tested.
-
-### Release steps
-
-Before releasing, it is recommended to run benchmarks to compare performance between the development and production deployments. Run benchmarks between prod and dev via the [Run Benchmarks workflow in the tile-benchmarking repo](https://github.com/developmentseed/tile-benchmarking/actions/workflows/run-benchmarks.yml). Once the workflow completes, inspect the output of the "Upload results to S3" step for each environment to get the directory prefix for the past run. The output can be reviewed using the https://github.com/developmentseed/tile-benchmarking/blob/main/03-e2e/compare-prod-dev.ipynb notebook.
-
-
-3. When it is time to release changes to production, add changes to CHANGELOG.md under a new release version and commit to dev. The `dev` branch will be merged to the `main` branch (no PR necessary).
-4. The development deployment is updated to the latest commit on main. This should be manually tested again.
-5. When ready, a release will be created on main by creating a tag. This will trigger the production deployment.
-6. The production deployment (https://prod-titiler-xarray.delta-backend.com) should be manually tested.
+1. **Open pull requests:** PRs are made to the `dev` branch. PRs should include tests and documentation. pytest should succeed before merging. If appropriate, changes should be added to the CHANGELOG.md file under the [**Unreleased**](https://github.com/developmentseed/titiler-multidim/blob/remove-automated-deployment-actions/CHANGELOG.md#unreleased) header.
+2. **Deploy to SMCE Staging:** Once merged, deploy titiler-multidim to the smce-staging environment of veda-deploy.
+    1. Verify `TITILER_MULTIDIM_GIT_REF` in the [smce-staging environment of veda-deploy](https://github.com/NASA-IMPACT/veda-deploy/settings/environments/4556936903/edit) is set to `dev`.
+    2. Follow the steps in [veda-deploy's How to deploy section](https://github.com/NASA-IMPACT/veda-deploy?tab=readme-ov-file#how-to-deploy). Select `smce-staging` for `Environment to deploy to` and ensure only `DEPLOY_TITILER_MULTIDIM` is checked.
+3. **Deploy to MCP Prod:** When it is time to release changes to [veda-deploy's MCP environment](https://github.com/NASA-IMPACT/veda-deploy/settings/environments/2525365130/edit):
+    1. Add a new release version heading (e.g. `v0.2.1`) to the top of CHANGELOG.md under the **Unreleased** header, so previously unreleased changes are documented as a part of the new release and new changes can still be added under **Unreleased**.
+    2. Merge `dev` to main`.
+    3. Tag `main` with the new release version (e.g. `v0.2.1`).
+    4. Update the `TITILER_MULTIDIM_GIT_REF` in [veda-deploy's MCP environment](https://github.com/NASA-IMPACT/veda-deploy/settings/environments/2525365130/edit) to the release tag (e.g. `v0.2.1`).
+    5. Follow the steps in [veda-deploy's How to deploy section](https://github.com/NASA-IMPACT/veda-deploy?tab=readme-ov-file#how-to-deploy). Select `mcp-prod` for `Environment to deploy to` and ensure only `DEPLOY_TITILER_MULTIDIM` is checked.
