@@ -87,7 +87,7 @@ jobs:
       - uses: ./.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
-          skip_deploy: true
+          skip_deploy: 'true'
 
   deploy-development:
     needs: [tests]
@@ -122,7 +122,7 @@ jobs:
       - uses: ./.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
-          skip_deploy: false
+          skip_deploy: 'false'
 
   deploy-production:
     needs: [tests]
@@ -157,4 +157,4 @@ jobs:
       - uses: ./.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
-          skip_deploy: false
+          skip_deploy: 'false'

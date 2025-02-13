@@ -15,8 +15,8 @@ inputs:
     default: ''
   skip_deploy:
     required: false
-    type: boolean
-    default: false
+    type: string
+    default: 'false'
 
 runs:
   using: "composite"
@@ -83,7 +83,7 @@ runs:
         echo "All asset directories are within size limits."
 
     - name: Deploy
-      if: ${{ !inputs.skip_deploy }}
+      if: ${{ inputs.skip_deploy == 'false' }}
       id: deploy_titiler_multidim_stack
       shell: bash
       working-directory: ${{ inputs.dir }}
