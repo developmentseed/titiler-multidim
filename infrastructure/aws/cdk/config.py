@@ -1,5 +1,6 @@
 """STACK Configs."""
 
+from getpass import getuser
 from typing import Annotated, Dict, List, Optional
 
 from pydantic import Field
@@ -7,18 +8,28 @@ from pydantic_settings import BaseSettings
 
 
 class StackSettings(BaseSettings):
-    """Application settings"""
+    """CDK Stack settings"""
 
-    name: str = "titiler-multidim"
-    stage: str = "production"
+    titiler_multidim_stack_name: str = "titiler-multidim"
+    stage: str = Field(
+        ...,
+        description=(
+            "Deployment stage used to name stack and resources, "
+            "i.e. `dev`, `staging`, `prod`"
+        ),
+    )
 
-    owner: Optional[str] = None
-    client: Optional[str] = None
-    project: Optional[str] = None
+    owner: str = Field(
+        description=" ".join(
+            [
+                "Name of primary contact for Cloudformation Stack.",
+                "Used to tag generated resources",
+                "Defaults to current username.",
+            ]
+        ),
+        default_factory=getuser,
+    )
 
-    reader_role_arn: Annotated[
-        str, "arn for IAM role with priveleges required for reading data"
-    ]
     vpc_id: Annotated[
         Optional[str],
         "VPC id to use for this stack, will create a new one if not provide",
@@ -32,6 +43,31 @@ class StackSettings(BaseSettings):
         None,
         description="When deploying from a local machine the AWS region id is required to deploy to an existing VPC",
     )
+
+    def cdk_env(self) -> dict:
+        """Load a cdk environment dict for stack"""
+
+        if self.vpc_id:
+            return {
+                "account": self.cdk_default_account,
+                "region": self.cdk_default_region,
+            }
+        else:
+            return {}
+
+    class Config:
+        """model config"""
+
+        env_file = ".env"
+        extra = "ignore"
+
+
+class AppSettings(BaseSettings):
+    """Application settings"""
+
+    reader_role_arn: Annotated[
+        str, "arn for IAM role with priveleges required for reading data"
+    ]
     additional_env: Dict = {}
 
     # S3 bucket names where TiTiler could do HEAD and GET Requests
@@ -51,19 +87,9 @@ class StackSettings(BaseSettings):
     max_concurrent: Optional[int] = None
     alarm_email: Optional[str] = ""
 
-    def cdk_env(self) -> dict:
-        """Load a cdk environment dict for stack"""
-
-        if self.vpc_id:
-            return {
-                "account": self.cdk_default_account,
-                "region": self.cdk_default_region,
-            }
-        else:
-            return {}
-
     class Config:
         """model config"""
 
         env_file = ".env"
-        env_prefix = "STACK_"
+        extra = "ignore"
+        env_prefix = "TITILER_MULTIDIM_"
