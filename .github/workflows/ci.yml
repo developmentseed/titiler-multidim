@@ -61,14 +61,13 @@ jobs:
     if: github.event_name == 'pull_request'
     env:
       UV_PYTHON: 3.12
+      CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
+      CDK_DEFAULT_REGION: ${{ vars.CDK_DEFAULT_REGION }}
+      STAGE: ${{ vars.STAGE }}
+      VPC_ID: ${{ vars.VPC_ID }}
       TITILER_MULTIDIM_PYTHONWARNINGS: ignore
       TITILER_MULTIDIM_DEBUG: true
-      STACK_ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }}
-      STACK_CDK_DEFAULT_ACCOUNT: ${{ vars.STACK_CDK_DEFAULT_ACCOUNT }}
-      STACK_CDK_DEFAULT_REGION: ${{ vars.STACK_CDK_DEFAULT_REGION }}
-      STACK_READER_ROLE_ARN: ${{ vars.STACK_READER_ROLE_ARN }}
-      STACK_STAGE: ${{ vars.STACK_STAGE }}
-      STACK_VPC_ID: ${{ vars.STACK_VPC_ID }}
+      TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
   
     defaults:
       run:
@@ -82,7 +81,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-actions-pr
-          aws-region: ${{ vars.STACK_CDK_DEFAULT_REGION }}
+          aws-region: ${{ vars.CDK_DEFAULT_REGION }}
 
       - uses: ./.github/actions/cdk-deploy
         with:
