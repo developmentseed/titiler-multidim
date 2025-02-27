@@ -81,7 +81,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: github-actions-pr
-          aws-region: ${{ vars.CDK_DEFAULT_REGION }}
+          aws-region: ${{ vars.STACK_CDK_DEFAULT_REGION }}
 
       - uses: ./.github/actions/cdk-deploy
         with:
