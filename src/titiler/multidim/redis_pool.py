@@ -1,10 +1,10 @@
-""" Redis singleton class. """
+"""Redis singleton class."""
+
 import os
 
-import fakeredis
 import redis  # type: ignore
 
-from titiler.xarray.settings import ApiSettings
+from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
 
@@ -24,9 +24,11 @@ class RedisCache:
         return cls._instance
 
 
-def get_redis():
+def get_redis() -> redis.Redis:
     """Get a redis connection."""
     if os.getenv("TEST_ENVIRONMENT"):
+        import fakeredis
+
         server = fakeredis.FakeServer()
         # Use fakeredis in a test environment
         return fakeredis.FakeRedis(server=server)

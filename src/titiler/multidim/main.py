@@ -1,4 +1,4 @@
-"""titiler app."""
+"""titiler.multidim."""
 
 import logging
 
@@ -8,19 +8,19 @@ from fastapi import Depends, FastAPI
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 
-import titiler.xarray.reader as reader
+import titiler.multidim.reader as reader
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
-from titiler.core.factory import AlgorithmFactory, TMSFactory
+from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import (
     CacheControlMiddleware,
     LoggerMiddleware,
     TotalTimeMiddleware,
 )
-from titiler.xarray import __version__ as titiler_version
-from titiler.xarray.factory import ZarrTilerFactory
-from titiler.xarray.middleware import ServerTimingMiddleware
-from titiler.xarray.redis_pool import get_redis
-from titiler.xarray.settings import ApiSettings
+from titiler.multidim import __version__ as titiler_version
+from titiler.multidim.factory import XarrayTilerFactory
+from titiler.multidim.middleware import ServerTimingMiddleware
+from titiler.multidim.redis_pool import get_redis
+from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True
@@ -38,7 +38,7 @@ app = FastAPI(
 
 ###############################################################################
 # Tiles endpoints
-xarray_factory = ZarrTilerFactory()
+xarray_factory = XarrayTilerFactory()
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
 
 ###############################################################################
@@ -50,6 +50,14 @@ app.include_router(tms.router, tags=["Tiling Schemes"])
 # Algorithms endpoints
 algorithms = AlgorithmFactory()
 app.include_router(algorithms.router, tags=["Algorithms"])
+
+###############################################################################
+# Colormaps endpoints
+cmaps = ColorMapFactory()
+app.include_router(
+    cmaps.router,
+    tags=["ColorMaps"],
+)
 
 error_codes = {
     zarr.errors.GroupNotFoundError: status.HTTP_422_UNPROCESSABLE_ENTITY,

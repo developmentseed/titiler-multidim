@@ -1,8 +1,8 @@
 [project]
-name = "titiler.xarray"
-description = "TiTiler extension for xarray."
+name = "titiler-multidim"
+description = "TiTiler application extension for titiler.xarray."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     {name = "Vincent Sarago", email = "vincent@developmentseed.com"},
 ]
@@ -25,39 +25,46 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "cftime",
-    "h5netcdf",
-    "xarray",
-    "rioxarray",
-    "zarr",
-    "fakeredis",
-    "fsspec",
-    "s3fs",
+    "titiler.core>=0.19.0,<0.20",
+    "titiler.xarray>=0.19.0,<0.20",
     "aiohttp",
-    "requests",
-    "pydantic==2.0.2",
-    "titiler.core>=0.14.1,<0.15",
+    "cftime",
+    "fastapi",
+    "fsspec",
+    "h5netcdf",
+    "numpy",
     "pydantic-settings~=2.0",
-    "pandas==1.5.3",
+    "pydantic>=2.4,<3.0",
     "redis",
+    "requests",
+    "rioxarray",
+    "s3fs",
+    "xarray",
+    "zarr>=2,<3",
 ]
 
 [project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "httpx",
-    "yappi",
-]
-dev = [
-    "pre-commit"
-]
-debug = [
-    "yappi"
-]
 server = [
     "uvicorn"
+]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.23.5",
+    "httpx",
+    "ipython>=8.12.3",
+    "netcdf4>=1.7.2",
+    "pre-commit>=3.5.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "pytest>=8.3.2",
+    "yappi>=1.6.0",
+]
+deployment = [
+    "aws-cdk-lib~=2.177.0",
+    "constructs>=10.4.2",
+    "pydantic-settings~=2.0",
+    "python-dotenv>=1.0.1",
 ]
 
 [project.urls]
@@ -108,13 +115,22 @@ namespace_packages = true
 explicit_package_bases = true
 
 [build-system]
-requires = ["pdm-pep517"]
-build-backend = "pdm.pep517.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
 
 [tool.pdm.version]
 source = "file"
-path = "titiler/xarray/__init__.py"
+path = "src/titiler/multidim/__init__.py"
+
+
+[tool.pdm]
+package-dir = "src/"
 
 [tool.pdm.build]
-includes = ["titiler/xarray"]
+includes = ["src/titiler/multidim/"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"

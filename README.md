@@ -1,41 +1,47 @@
-# titiler-xarray
+# titiler-multidim
 
 ---
 
-**Source Code**: <a href="https://github.com/developmentseed/titiler-xarray" target="_blank">https://github.com/developmentseed/titiler-xarray</a>
+**Source Code**: <a href="https://github.com/developmentseed/titiler-multidim" target="_blank">https://github.com/developmentseed/titiler-multidim</a>
 
 ---
 
 ## Running Locally
 
 ```bash
-# It's recommanded to use virtual environment
-python -m pip install --upgrade virtualenv
-virtualenv .venv
+# It's recommended to install dependencies in a virtual environment
+python -m venv .venv
+source .venv/bin/activate
 
 python -m pip install -e . uvicorn
-source .venv/bin/activate
-uvicorn titiler.xarray.main:app --reload
+export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
+uvicorn titiler.multidim.main:app --reload
 ```
 
-To access the docs, visit http://127.0.0.1:8000/docs.
-![](https://github.com/developmentseed/titiler-xarray/assets/10407788/4368546b-5b60-4cd5-86be-fdd959374b17)
+To access the docs, visit <http://127.0.0.1:8000/api.html>.
+![](https://github.com/developmentseed/titiler-multidim/assets/10407788/4368546b-5b60-4cd5-86be-fdd959374b17)
 
-## Testing
+## Development
 
 Tests use data generated locally by using `tests/fixtures/generate_test_*.py` scripts.
+
+Install the package using [`uv`](https://docs.astral.sh/uv/getting-started/installation/) with all development dependencies:
+
+```bash
+uv sync
+uv run pre-commit install
+```
 
 To run all the tests:
 
 ```bash
-python -m pip install -e ".[tests]"
-python -m pytest --cov titiler.xarray --cov-report term-missing -s -vv
+uv run pytest
 ```
 
 To run just one test:
 
 ```bash
-python -m pytest tests/test_app.py::test_get_info --cov titiler.xarray --cov-report term-missing -s -vv
+uv run pytest tests/test_app.py::test_get_info 
 ```
 
 ## VEDA Deployment
@@ -45,7 +51,6 @@ The Github Actions workflow defined in [.github/workflows/ci.yml](./.github/work
 * There are 2 stacks - one production and one development.
 * The production stack is deployed when the `main` branch is tagged, creating a new release. The production stack will deploy to a stack with an API Gateway associated with the domain prod-titiler-xarray.delta-backend.com/.
 * The development stack will be deployed upon pushes to the `dev` and `main` branches. The development stack will deploy to a stack with an API Gateway associated with the domain dev-titiler-xarray.delta-backend.com/.
-
 
 ## New Deployments
 
@@ -57,19 +62,14 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
     # Download titiler repo
     git clone https://github.com/developmentseed/titiler-xarray.git
 
-    # Create a virtual environment
-    python -m pip install --upgrade virtualenv
-    virtualenv infrastructure/aws/.venv
-    source infrastructure/aws/.venv/bin/activate
-
-    # install cdk dependencies
-    python -m pip install -r infrastructure/aws/requirements-cdk.txt
+    # Install with the deployment dependencies
+    uv sync --group deployment
 
     # Install node dependency
-    npm --prefix infrastructure/aws install
+    uv run npm --prefix infrastructure/aws install
 
     # Deploys the CDK toolkit stack into an AWS environment
-    npm --prefix infrastructure/aws run cdk -- bootstrap
+    uv run npm --prefix infrastructure/aws run cdk -- bootstrap
 
     # or to a specific region and or using AWS profile
     AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=myprofile npm --prefix infrastructure/aws run cdk -- bootstrap
@@ -82,18 +82,17 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
 3. Pre-Generate CFN template
 
     ```bash
-    npm --prefix infrastructure/aws run cdk -- synth  # Synthesizes and prints the CloudFormation template for this stack
+    uv run npm --prefix infrastructure/aws run cdk -- synth  # Synthesizes and prints the CloudFormation template for this stack
     ```
 
 4. Deploy
 
     ```bash
-    STACK_STAGE=staging npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-staging
+    STACK_STAGE=staging uv run npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-staging
 
     # Deploy in specific region
-    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=smce-veda STACK_STAGE=production  npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-production
+    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=smce-veda STACK_STAGE=production  uv run npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-production
     ```
-
 
 **Important**
 

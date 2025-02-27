@@ -3,23 +3,22 @@
 import os
 from typing import Any, Dict, List, Optional
 
-from aws_cdk import App, CfnOutput, Duration, Stack, Tags
-from aws_cdk import aws_apigatewayv2_alpha as apigw
+from aws_cdk import App, CfnOutput, Duration, Stack, Tags, aws_lambda
+from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_elasticache as elasticache
 from aws_cdk import aws_iam as iam
-from aws_cdk import aws_lambda
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
-from aws_cdk.aws_apigatewayv2_integrations_alpha import HttpLambdaIntegration
-from config import StackSettings
+from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
+from config import AppSettings, StackSettings
 from constructs import Construct
 
-settings = StackSettings()
-
+stack_settings = StackSettings()
+app_settings = AppSettings()
 
 DEFAULT_ENV = {
     "GDAL_CACHEMAX": "200",  # 200 mb
@@ -51,21 +50,35 @@ class LambdaStack(Stack):
         **kwargs: Any,
     ) -> None:
         """Define stack."""
-        super().__init__(scope, id, *kwargs)
+        super().__init__(scope, id, **kwargs)
 
         permissions = permissions or []
         environment = environment or {}
 
-        vpc = ec2.Vpc(
-            self,
-            f"{id}-vpc",
-            max_azs=2,
-            subnet_configuration=[
-                ec2.SubnetConfiguration(
-                    name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
-                )
-            ],
-        )
+        if stack_settings.vpc_id:
+            vpc = ec2.Vpc.from_lookup(
+                self,
+                f"{id}-vpc",
+                vpc_id=stack_settings.vpc_id,
+            )
+        else:
+            vpc = ec2.Vpc(
+                self,
+                f"{id}-vpc",
+                max_azs=2,
+                subnet_configuration=[
+                    ec2.SubnetConfiguration(
+                        name="Public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=24
+                    )
+                ],
+            )
+
+            ec2.GatewayVpcEndpoint(
+                self,
+                f"{id}-s3-vpc-endpoint",
+                vpc=vpc,
+                service=ec2.GatewayVpcEndpointAwsService.S3,
+            )
 
         security_group = ec2.SecurityGroup(
             self,
@@ -104,8 +117,8 @@ class LambdaStack(Stack):
 
         veda_reader_role = iam.Role.from_role_arn(
             self,
-            "veda-reader-dev-role",
-            role_arn=f"arn:aws:iam::{self.account}:role/veda-data-reader-dev",
+            "reader-role",
+            role_arn=app_settings.reader_role_arn,
         )
 
         lambda_function = aws_lambda.Function(
@@ -116,6 +129,9 @@ class LambdaStack(Stack):
                 path=os.path.abspath(context_dir),
                 file="infrastructure/aws/lambda/Dockerfile",
                 platform="linux/amd64",
+                build_args={
+                    "PYTHON_VERSION": runtime.to_string().replace("python", ""),
+                },
             ),
             handler="handler.handler",
             memory_size=memory,
@@ -124,21 +140,13 @@ class LambdaStack(Stack):
             environment={
                 **DEFAULT_ENV,
                 **environment,
-                "TITILER_XARRAY_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+                "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
-        )
-
-        # Create an S3 VPC Endpoint
-        ec2.GatewayVpcEndpoint(
-            self,
-            f"{id}-s3-vpc-endpoint",
-            vpc=vpc,
-            service=ec2.GatewayVpcEndpointAwsService.S3,
         )
 
         for perm in permissions:
@@ -153,7 +161,7 @@ class LambdaStack(Stack):
         )
 
         # Create an SNS Topic
-        if settings.alarm_email:
+        if app_settings.alarm_email:
             topic = sns.Topic(
                 self,
                 f"{id}-500-Errors",
@@ -161,7 +169,7 @@ class LambdaStack(Stack):
                 topic_name=f"{id}-Gateway-500-Errors",
             )
             # Subscribe email to the topic
-            email_address = settings.alarm_email
+            email_address = app_settings.alarm_email
             topic.add_subscription(subscriptions.EmailSubscription(email_address))
 
             # Create CloudWatch Alarm
@@ -187,30 +195,30 @@ class LambdaStack(Stack):
 app = App()
 
 perms = []
-if settings.buckets:
+if app_settings.buckets:
     perms.append(
         iam.PolicyStatement(
             actions=["s3:GetObject"],
-            resources=[f"arn:aws:s3:::{bucket}*" for bucket in settings.buckets],
+            resources=[f"arn:aws:s3:::{bucket}*" for bucket in app_settings.buckets],
         )
     )
 
 
 lambda_stack = LambdaStack(
     app,
-    f"{settings.name}-{settings.stage}",
+    f"{stack_settings.titiler_multidim_stack_name}-{stack_settings.stage}",
     memory=10240,
-    timeout=settings.timeout,
-    concurrent=settings.max_concurrent,
+    timeout=app_settings.timeout,
+    concurrent=app_settings.max_concurrent,
     permissions=perms,
-    environment=settings.additional_env,
+    environment=app_settings.additional_env,
+    env=stack_settings.cdk_env(),  # deploy env settings (account, region) passed to Stack.__init__()
 )
 # Tag infrastructure
 for key, value in {
-    "Project": settings.name,
-    "Stack": settings.stage,
-    "Owner": settings.owner,
-    "Client": settings.client,
+    "Project": stack_settings.titiler_multidim_stack_name,
+    "Stack": stack_settings.stage,
+    "Owner": stack_settings.owner,
 }.items():
     if value:
         Tags.of(lambda_stack).add(key, value)

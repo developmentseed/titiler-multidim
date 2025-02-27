@@ -1,0 +1,91 @@
+name: Deploy
+
+inputs:
+  env_aws_secret_name:
+    required: false
+    type: string
+    default: ''
+  dir:
+    required: false
+    type: string
+    default: "."
+  script_path:
+    required: false
+    type: string
+    default: ''
+  skip_deploy:
+    required: false
+    type: string
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install node and related deps
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Install AWS CDK
+      shell: bash
+      run: npm install -g aws-cdk@2
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "0.5.*" 
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        uv sync --only-group deployment
+        uv run npm install
+
+    - name: Get relevant environment configuration from aws secrets
+      if: inputs.env_aws_secret_name != ''
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      env:
+        AWS_DEFAULT_REGION: us-west-2
+      run: |
+        if [[ -z "${{ inputs.script_path }}" ]]; then
+        ./scripts/sync-env.sh ${{ inputs.env_aws_secret_name }}
+        else
+        python ${{ inputs.script_path }} --secret-id ${{ inputs.env_aws_secret_name }}
+        fi
+
+    - name: CDK Synth
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: uv run --only-group deployment npm run cdk -- synth
+
+    - name: Check Asset Sizes
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        MAX_SIZE_BYTES=262144000  # 262 MB in bytes
+        for dir in cdk.out/asset.*; do
+          if [ -d "$dir" ]; then
+            size=$(du -sb "$dir" | cut -f1)
+            if [ "$size" -gt $MAX_SIZE_BYTES ]; then
+              echo "Directory $dir exceeds 262 MB with size $size bytes (max: $MAX_SIZE_BYTES bytes)."
+              exit 1
+            fi
+            echo "Asset directory $dir size: $size bytes"
+          fi
+        done
+        echo "All asset directories are within size limits."
+
+    - name: Deploy
+      if: ${{ inputs.skip_deploy == 'false' }}
+      id: deploy_titiler_multidim_stack
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      run: |
+        uv run cdk deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json
