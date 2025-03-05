@@ -12,7 +12,7 @@ from starlette.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 from typing_extensions import Annotated
 
-from titiler.core.dependencies import ColorFormulaParams, DefaultDependency
+from titiler.core.dependencies import DefaultDependency
 from titiler.core.resources.enums import ImageType
 from titiler.core.resources.responses import JSONResponse
 from titiler.multidim.reader import XarrayReader
@@ -141,17 +141,21 @@ class XarrayTilerFactory(BaseTilerFactory):
                 Query(description="Overwrite default maxzoom."),
             ] = None,
             post_process=Depends(self.process_dependency),
-            rescale=Depends(self.rescale_dependency),
-            color_formula=Depends(ColorFormulaParams),
             colormap=Depends(self.colormap_dependency),
             render_params=Depends(self.render_dependency),
             dataset_params=Depends(self.dataset_dependency),
         ):
             """Return map Viewer."""
-            jinja2_env = jinja2.Environment(
-                loader=jinja2.ChoiceLoader([jinja2.PackageLoader(__package__, ".")])
+            titiler_templates = Jinja2Templates(
+                env=jinja2.Environment(
+                    loader=jinja2.ChoiceLoader([jinja2.PackageLoader("titiler.core")])
+                )
             )
-            templates = Jinja2Templates(env=jinja2_env)
+            local_templates = Jinja2Templates(
+                env=jinja2.Environment(
+                    loader=jinja2.ChoiceLoader([jinja2.PackageLoader(__package__, ".")])
+                )
+            )
 
             if url:
                 tilejson_url = self.url_for(
@@ -161,7 +165,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                     tilejson_url += f"?{urlencode(request.query_params._list)}"
 
                 tms = self.supported_tms.get(tileMatrixSetId)
-                return templates.TemplateResponse(
+                return titiler_templates.TemplateResponse(
                     name="map.html",
                     context={
                         "request": request,
@@ -172,7 +176,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                     media_type="text/html",
                 )
             else:
-                return templates.TemplateResponse(
+                return local_templates.TemplateResponse(
                     name="map-form.html",
                     context={
                         "request": request,
