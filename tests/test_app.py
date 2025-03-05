@@ -217,4 +217,4 @@ def test_map_with_params(app):
     )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-    assert find_string_in_stream(response, "<div id='map' class=\"hidden\"></div>")
+    assert find_string_in_stream(response, '<div id="map"></div>')
