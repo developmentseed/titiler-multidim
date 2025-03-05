@@ -25,8 +25,8 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "titiler.core>=0.19.0,<0.20",
-    "titiler.xarray>=0.19.0,<0.20",
+    "titiler.core>=0.21.0,<0.22",
+    "titiler.xarray>=0.21.0,<0.22",
     "aiohttp",
     "cftime",
     "fastapi",

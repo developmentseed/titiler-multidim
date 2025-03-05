@@ -343,7 +343,7 @@
                     var colormapValue = document.getElementById("colormap-dropdown").value;
                     if (urlValue) {
                         // Redirect to the map URL with the input value as a parameter
-                        var href = `map?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableValue)}`;
+                        var href = `map?url=${encodeURIComponent(urlValue)}&variable=${encodeURIComponent(variableValue)}&maxzoom=18`;
                         if (rescaleValue) {
                             href += `&rescale=${encodeURIComponent(rescaleValue)}`;
                         }

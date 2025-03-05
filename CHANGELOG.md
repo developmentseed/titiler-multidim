@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
+
+* Upgrade to `titiler>=0.21,<0.22`
+* Use default `map.html` template from `titiler.core` for the `/map` endpoint instead of a custom one
+
+## 0.3.0
 
 * Import `titiler.xarray` (from [`titiler repo`](https://github.com/developmentseed/titiler)) ([#72](https://github.com/developmentseed/titiler-xarray/pull/72))
 * Rename the package to `titiler.multidim` ([#72](https://github.com/developmentseed/titiler-xarray/pull/72)) **breaking change**
