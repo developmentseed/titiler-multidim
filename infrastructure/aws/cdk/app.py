@@ -140,6 +140,7 @@ class LambdaStack(Stack):
             environment={
                 **DEFAULT_ENV,
                 **environment,
+                "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
                 "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
@@ -156,7 +157,14 @@ class LambdaStack(Stack):
             self,
             f"{id}-endpoint",
             default_integration=HttpLambdaIntegration(
-                f"{id}-integration", lambda_function
+                f"{id}-integration",
+                lambda_function,
+                parameter_mapping=apigw.ParameterMapping().overwrite_header(
+                    "host",
+                    apigw.MappingValue(stack_settings.veda_custom_host),
+                )
+                if stack_settings.veda_custom_host
+                else None,
             ),
         )
 

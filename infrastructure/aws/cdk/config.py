@@ -43,6 +43,10 @@ class StackSettings(BaseSettings):
         None,
         description="When deploying from a local machine the AWS region id is required to deploy to an existing VPC",
     )
+    veda_custom_host: Optional[str] = Field(
+        None,
+        description="Complete url of custom host including subdomain. When provided, override host in api integration",
+    )
 
     def cdk_env(self) -> dict:
         """Load a cdk environment dict for stack"""
@@ -86,6 +90,11 @@ class AppSettings(BaseSettings):
     # Default: - No specific limit - account limit.
     max_concurrent: Optional[int] = None
     alarm_email: Optional[str] = ""
+
+    root_path: str = Field(
+        "",
+        description="Optional root path for all api endpoints",
+    )
 
     class Config:
         """model config"""
