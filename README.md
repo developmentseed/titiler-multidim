@@ -1,5 +1,7 @@
 # titiler-multidim
 
+Example of application built with `titiler.xarray` [package](https://developmentseed.org/titiler/packages/xarray/)
+
 ---
 
 **Source Code**: <a href="https://github.com/developmentseed/titiler-multidim" target="_blank">https://github.com/developmentseed/titiler-multidim</a>
