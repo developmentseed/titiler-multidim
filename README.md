@@ -12,12 +12,9 @@ Example of application built with `titiler.xarray` [package](https://development
 
 ```bash
 # It's recommended to install dependencies in a virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-python -m pip install -e . uvicorn
+uv sync --dev
 export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
-uvicorn titiler.multidim.main:app --reload
+uv run uvicorn titiler.multidim.main:app --reload
 ```
 
 To access the docs, visit <http://127.0.0.1:8000/api.html>.
