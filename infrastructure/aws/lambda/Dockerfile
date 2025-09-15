@@ -1,4 +1,4 @@
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 
 FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -6,20 +6,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /tmp
 
 # Install system dependencies to compile (numexpr)
-RUN yum install -y gcc-c++
+RUN dnf install -y gcc-c++
 
-COPY pyproject.toml pyproject.toml
-COPY LICENSE LICENSE
-COPY README.md README.md
-COPY src/titiler/ src/titiler/
+COPY uv.lock .python-version pyproject.toml LICENSE README.md ./
+COPY titiler/ ./titiler/
 
-# Install dependencies
-# HACK: aiobotocore has a tight botocore dependency
-# https://github.com/aio-libs/aiobotocore/issues/862
-# and becaise we NEED to remove both boto3 and botocore to save space for the package
-# we have to force using old package version that seems `almost` compatible with Lambda env botocore
-# https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html
-RUN uv pip install --compile-bytecode . "mangum>=0.10.0" "botocore==1.29.76" "aiobotocore==2.5.0" --target /asset --no-binary pydantic
+RUN uv export --locked --no-editable --no-dev --extra lambda --format requirements.txt -o requirements.txt && \
+  uv pip install --compile-bytecode --no-binary pydantic --target /asset -r requirements.txt 
+
 
 # Reduce package size and remove useless files
 RUN cd /asset && find . -type f -name '*.pyc' | while read f; do n=$(echo $f | sed 's/__pycache__\///' | sed 's/.cpython-[0-9]*//'); cp $f $n; done;

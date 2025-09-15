@@ -28,6 +28,8 @@ dependencies = [
     "titiler.core>=0.21.0,<0.22",
     "titiler.xarray>=0.21.0,<0.22",
     "aiohttp",
+    "aiobotocore>=2.24.0",
+    "boto3>=1.39.0",
     "cftime",
     "fastapi",
     "fsspec",
@@ -46,6 +48,10 @@ dependencies = [
 [project.optional-dependencies]
 server = [
     "uvicorn"
+]
+lambda = [
+    "mangum==0.19.0",
+    "aiobotocore>=2.24.0,<2.24.2"
 ]
 
 [dependency-groups]
