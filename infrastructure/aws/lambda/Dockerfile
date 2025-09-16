@@ -9,7 +9,7 @@ WORKDIR /tmp
 RUN dnf install -y gcc-c++
 
 COPY uv.lock .python-version pyproject.toml LICENSE README.md ./
-COPY titiler/ ./titiler/
+COPY src/titiler/ ./src/titiler/
 
 RUN uv export --locked --no-editable --no-dev --extra lambda --format requirements.txt -o requirements.txt && \
   uv pip install --compile-bytecode --no-binary pydantic --target /asset -r requirements.txt 
