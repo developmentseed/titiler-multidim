@@ -113,12 +113,18 @@ class XarrayTilerFactory(BaseTilerFactory):
                     description="Whether to decode times",
                 ),
             ] = True,
-            drop_dim: Annotated[
+            sel: Annotated[
                 Optional[str],
-                Query(description="Dimension to drop"),
+                Query(
+                    description="Xarray Indexing using dimension names `{dimension}={value}`.",
+                ),
             ] = None,
-            datetime: Annotated[
-                Optional[str], Query(description="Slice of time to read (if available)")
+            method: Annotated[
+                Optional[Literal["nearest", "pad", "ffill", "backfill", "bfill"]],
+                Query(
+                    alias="sel_method",
+                    description="Xarray indexing method to use for inexact matches.",
+                ),
             ] = None,
             tile_format: Annotated[
                 Optional[ImageType],
