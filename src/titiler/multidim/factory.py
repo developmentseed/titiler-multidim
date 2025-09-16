@@ -96,7 +96,36 @@ class XarrayTilerFactory(BaseTilerFactory):
                 "Identifier selecting one of the supported TileMatrixSetIds",
             ],
             url: Annotated[Optional[str], Query(description="Dataset URL")] = None,
-            reader_params=Depends(self.reader_dependency),
+            variable: Annotated[
+                Optional[str],
+                Query(description="Xarray Variable"),
+            ] = None,
+            group: Annotated[
+                Optional[int],
+                Query(
+                    description="Select a specific zarr group from a zarr hierarchy, can be for pyramids or datasets. Can be used to open a dataset in HDF5 files."
+                ),
+            ] = None,
+            decode_times: Annotated[
+                bool,
+                Query(
+                    title="decode_times",
+                    description="Whether to decode times",
+                ),
+            ] = True,
+            sel: Annotated[
+                Optional[str],
+                Query(
+                    description="Xarray Indexing using dimension names `{dimension}={value}`.",
+                ),
+            ] = None,
+            method: Annotated[
+                Optional[Literal["nearest", "pad", "ffill", "backfill", "bfill"]],
+                Query(
+                    alias="sel_method",
+                    description="Xarray indexing method to use for inexact matches.",
+                ),
+            ] = None,
             tile_format: Annotated[
                 Optional[ImageType],
                 Query(
