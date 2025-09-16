@@ -96,30 +96,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                 "Identifier selecting one of the supported TileMatrixSetIds",
             ],
             url: Annotated[Optional[str], Query(description="Dataset URL")] = None,
-            variable: Annotated[
-                Optional[str],
-                Query(description="Xarray Variable"),
-            ] = None,
-            group: Annotated[
-                Optional[int],
-                Query(
-                    description="Select a specific zarr group from a zarr hierarchy, can be for pyramids or datasets. Can be used to open a dataset in HDF5 files."
-                ),
-            ] = None,
-            decode_times: Annotated[
-                bool,
-                Query(
-                    title="decode_times",
-                    description="Whether to decode times",
-                ),
-            ] = True,
-            drop_dim: Annotated[
-                Optional[str],
-                Query(description="Dimension to drop"),
-            ] = None,
-            datetime: Annotated[
-                Optional[str], Query(description="Slice of time to read (if available)")
-            ] = None,
+            reader_params=Depends(self.reader_dependency),
             tile_format: Annotated[
                 Optional[ImageType],
                 Query(
