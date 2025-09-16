@@ -14,6 +14,8 @@ COPY src/titiler/ ./src/titiler/
 RUN uv export --locked --no-editable --no-dev --extra lambda --format requirements.txt -o requirements.txt && \
   uv pip install --compile-bytecode --no-binary pydantic --target /asset -r requirements.txt 
 
+# copy libexpat.so.1 into /asset which is included in LD_LIBRARY_PATH
+RUN cp /usr/lib64/libexpat.so.1 /asset/
 
 # Reduce package size and remove useless files
 RUN cd /asset && find . -type f -name '*.pyc' | while read f; do n=$(echo $f | sed 's/__pycache__\///' | sed 's/.cpython-[0-9]*//'); cp $f $n; done;
