@@ -10,12 +10,22 @@ test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
 
 test_zarr_store_params = {
-    "params": {"url": test_zarr_store, "variable": "CDD0", "decode_times": False},
+    "params": {
+        "url": test_zarr_store,
+        "variable": "CDD0",
+        "decode_times": False,
+        "sel": "time=0",
+    },
     "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
 }
 
 test_netcdf_store_params = {
-    "params": {"url": test_netcdf_store, "variable": "data", "decode_times": False},
+    "params": {
+        "url": test_netcdf_store,
+        "variable": "data",
+        "decode_times": False,
+        "sel": "time=0",
+    },
     "variables": ["data"],
 }
 test_unconsolidated_store_params = {
@@ -23,6 +33,7 @@ test_unconsolidated_store_params = {
         "url": test_unconsolidated_store,
         "variable": "var1",
         "decode_times": False,
+        "sel": "time=0",
     },
     "variables": ["var1", "var2"],
 }
@@ -32,6 +43,7 @@ test_pyramid_store_params = {
         "variable": "value",
         "decode_times": False,
         "group": "2",
+        "sel": "time=0",
     },
     "variables": ["value"],
 }

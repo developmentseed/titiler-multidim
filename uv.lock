@@ -2782,7 +2782,7 @@ wheels = [
 
 [[package]]
 name = "titiler-core"
-version = "0.21.1"
+version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -2797,9 +2797,9 @@ dependencies = [
     { name = "simplejson" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/d9/fd6febd1a3f90ee597d0e01bb514a4467a0aea3aad3f945845a9b0ad3e62/titiler_core-0.21.1.tar.gz", hash = "sha256:713c7a638365529ee346f7ad2bb1532242cce6de158ad8aae5247463ec251b35", size = 36941, upload-time = "2025-01-29T12:43:24.422Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/8c/555d99e90944d36e0bcab8def984dfa9aae3b6aa6cdfb4a34eae7ee80be7/titiler_core-0.23.1.tar.gz", hash = "sha256:56bb37919495c318a5ba71bd540f4ebbec1533cb172f32c84cbfea97aa0cf2ff", size = 82720, upload-time = "2025-08-27T22:20:04.071Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/4d/44ea749810373ffba5ff55db2bc82d0072f6e23ccac1ceb6a533612227b1/titiler_core-0.21.1-py3-none-any.whl", hash = "sha256:4453a3ca2b8db659a4e18a615c1f0eaedaf376b24f5c46d4d55e61e9de1b802f", size = 42805, upload-time = "2025-01-29T12:43:23.244Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/20/c51a4a12f3e4e6a7ecc6586f97aff71823846494ba9b57681355ef68ca2f/titiler_core-0.23.1-py3-none-any.whl", hash = "sha256:03104b648cf2400ed4bd2d9ea9df1b3509c22a8fed8822a93c42bab2ce55ac78", size = 89830, upload-time = "2025-08-27T22:20:02.439Z" },
 ]
 
 [[package]]
@@ -2880,8 +2880,8 @@ requires-dist = [
     { name = "requests" },
     { name = "rioxarray" },
     { name = "s3fs" },
-    { name = "titiler-core", specifier = ">=0.21.0,<0.22" },
-    { name = "titiler-xarray", specifier = ">=0.21.0,<0.22" },
+    { name = "titiler-core", specifier = ">=0.23.0,<0.24" },
+    { name = "titiler-xarray", specifier = ">=0.23.0,<0.24" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "xarray" },
     { name = "zarr", specifier = ">=2,<3" },
@@ -2911,7 +2911,7 @@ dev = [
 
 [[package]]
 name = "titiler-xarray"
-version = "0.21.1"
+version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rio-tiler" },
@@ -2921,9 +2921,9 @@ dependencies = [
     { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "xarray", version = "2025.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/41/5c62aa196e4a5896469f7cfa0266067a9041a04f79d6ac43e5d7aa99a667/titiler_xarray-0.21.1.tar.gz", hash = "sha256:29722d1766fe6cbfc31987b1a2c517a3b5d6ad4335352e664a135a277124bf21", size = 9965, upload-time = "2025-01-29T12:43:29.83Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/8d/82b17f7546cab7a9332a8d8399a7626607f59db079d1994d976b7d9e3fa7/titiler_xarray-0.23.1.tar.gz", hash = "sha256:bb8b8cc5a7d86cab917c65365bfd69ca64bd8eeb4eccae2cebea49313d3cc0e1", size = 10874, upload-time = "2025-08-27T22:20:07.974Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/e7/a2515ed66db85a1dd3516af8d8149b5827f2520c66ce0900e21229323385/titiler_xarray-0.21.1-py3-none-any.whl", hash = "sha256:c8ccebc39b56254d298ee4d9f85ec9f392429dd214803c1077cbea50d9c79344", size = 10816, upload-time = "2025-01-29T12:43:27.691Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/81/48d9f13b66a1f9ab04f39529c923e075b9d33951465e0f376e897f0711c7/titiler_xarray-0.23.1-py3-none-any.whl", hash = "sha256:a769e5744f1240e8962a6d1bb1e5592b510ad6a7f128795e5d598d1a09831db8", size = 11803, upload-time = "2025-08-27T22:20:07.069Z" },
 ]
 
 [[package]]

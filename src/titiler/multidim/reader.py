@@ -45,8 +45,7 @@ class XarrayReader(Reader):
         self.input = get_variable(
             self.ds,
             self.variable,
-            datetime=self.datetime,
-            drop_dim=self.drop_dim,
+            sel=self.sel,
         )
         super().__attrs_post_init__()
 
