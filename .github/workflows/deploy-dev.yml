@@ -1,0 +1,63 @@
+name: CDK Deploy Dev Workflow 🚀
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'main'
+  pull_request:
+    types: [labeled, synchronize]
+
+jobs:
+  deploy:
+    name: Deploy to dev 🚀
+    runs-on: ubuntu-latest
+    environment: dev
+    if: >
+      github.event_name != 'pull_request' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-dev'))    
+    env:
+      UV_PYTHON: 3.12
+      CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
+      CDK_DEFAULT_REGION: ${{ vars.CDK_DEFAULT_REGION }}
+      STAGE: ${{ vars.STAGE }}
+      VPC_ID: ${{ vars.VPC_ID }}
+      TITILER_MULTIDIM_PYTHONWARNINGS: ignore
+      TITILER_MULTIDIM_DEBUG: true
+      TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
+
+    steps:
+      - name: Determine branch to deploy
+        id: set_branch
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+          else
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.set_branch.outputs.branch }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: test-deploy
+          aws-region: us-west-2
+
+      - name: Run titiler-cmr deployment
+        uses: "./.github/actions/cdk-deploy"
+        with:
+          dir: "./infrastructure/aws"
+          env_aws_secret_name: ""
