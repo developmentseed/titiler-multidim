@@ -1,28 +1,14 @@
 {
-  "bounds": [
-    -180.0,
-    -90.0,
-    180.0,
-    90.0
-  ],
+  "bounds": [-180.0, -90.0, 180.0, 90.0],
   "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
-  "band_metadata": [
-    [
-      "b1",
-      {}
-    ]
-  ],
-  "band_descriptions": [
-    [
-      "b1",
-      "value"
-    ]
-  ],
+  "band_metadata": [["b1", {}]],
+  "band_descriptions": [["b1", "0.0"]],
   "dtype": "float32",
   "nodata_type": "None",
   "name": "data",
   "count": 1,
   "width": 360,
   "height": 180,
-  "attrs": {}
+  "attrs": {},
+  "dimensions": ["y", "x"]
 }

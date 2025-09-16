@@ -71,7 +71,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                 variable=reader_params.variable,
                 group=reader_params.group,
                 decode_times=reader_params.decode_times,
-                datetime=reader_params.datetime,
+                sel=reader_params.sel,
             ) as src_dst:
                 boolean_mask = ~np.isnan(src_dst.input)
                 data_values = src_dst.input.values[boolean_mask]
