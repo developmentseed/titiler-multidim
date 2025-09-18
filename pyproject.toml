@@ -56,6 +56,7 @@ lambda = [
 
 [dependency-groups]
 dev = [
+    "dask>=2025.9.1",
     "fakeredis>=2.23.5",
     "httpx",
     "ipykernel>=6.30.1",
