@@ -14,6 +14,8 @@ Example of application built with `titiler.xarray` [package](https://development
 # It's recommended to install dependencies in a virtual environment
 uv sync --dev
 export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
+#optional: Disable caching
+#export TITILER_MULTIDIM_ENABLE_CACHE=false
 uv run uvicorn titiler.multidim.main:app --reload
 ```
 

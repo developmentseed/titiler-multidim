@@ -41,8 +41,8 @@ dependencies = [
     "requests",
     "rioxarray",
     "s3fs",
-    "xarray",
-    "zarr>=2,<3",
+    "xarray>2025.07.1",
+    "zarr>3.1.0",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +56,7 @@ lambda = [
 
 [dependency-groups]
 dev = [
+    "dask>=2025.9.1",
     "fakeredis>=2.23.5",
     "httpx",
     "ipykernel>=6.30.1",

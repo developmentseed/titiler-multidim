@@ -34,6 +34,8 @@ class XarrayReader(Reader):
             group=self.group,
             decode_times=self.decode_times,
         )
+        print(f"DEBUG: Dataset id {id(self.ds)} opened from {self.src_path}")
+        print(f"DEBUG: {api_settings.enable_cache=}")
 
         if not ds and api_settings.enable_cache:
             # Serialize the dataset to bytes using pickle
