@@ -43,7 +43,6 @@ dependencies = [
     "s3fs",
     "xarray>2025.07.1",
     "zarr>3.1.0",
-    "dask>=2025.9.1",
 ]
 
 [project.optional-dependencies]
