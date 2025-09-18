@@ -124,7 +124,7 @@ def get_tile_test(app, ds_params, zoom: int = 0):
 @pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
 def test_get_tile(store_params, app):
     # if the store is a pyramid we test zoom levels 0-2
-    if store_params == store_params["pyramid_store"]:
+    if "group" in store_params["params"].keys():
         for z in range(3):
             get_tile_test(app, store_params, zoom=z)
     else:
