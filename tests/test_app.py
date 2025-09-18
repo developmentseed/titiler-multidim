@@ -4,6 +4,7 @@ import pytest
 
 from helpers import find_string_in_stream
 
+
 DATA_DIR = "tests/fixtures"
 test_zarr_store = os.path.join(DATA_DIR, "test_zarr_store.zarr")
 test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")

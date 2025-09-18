@@ -1,7 +1,7 @@
 {
-    "_ARRAY_DIMENSIONS": [
-        "time",
-        "lat",
-        "lon"
-    ]
+  "_ARRAY_DIMENSIONS": [
+    "time",
+    "lat",
+    "lon"
+  ]
 }

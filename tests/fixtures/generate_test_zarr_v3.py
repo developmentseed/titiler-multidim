@@ -10,7 +10,6 @@ lat_dim = 36
 lon_dim = 72
 chunk_size = {"time": 10, "lat": 10, "lon": 10}
 
-
 # Create coordinates
 time = np.arange(time_dim)
 lat = np.linspace(-90 + res / 2, 90 - res / 2, lat_dim)
@@ -51,5 +50,8 @@ ds = xr.Dataset(
 
 # Save dataset to a local Zarr store
 ds.to_zarr(
-    "tests/fixtures/test_zarr_store.zarr", mode="w", zarr_format=2, consolidated=True
+    "tests/fixtures/test_zarr_store_v3.zarr",
+    mode="w",
+    zarr_format=3,
+    consolidated=False,
 )
