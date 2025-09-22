@@ -1,5 +1,6 @@
 import json
 import os
+import pytest
 
 from helpers import find_string_in_stream
 
@@ -9,7 +10,9 @@ test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")
 test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
 
-test_zarr_store_params = {
+store_params = {}
+
+store_params["zarr_store"] = {
     "params": {
         "url": test_zarr_store,
         "variable": "CDD0",
@@ -19,7 +22,7 @@ test_zarr_store_params = {
     "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
 }
 
-test_netcdf_store_params = {
+store_params["netcdf_store"] = {
     "params": {
         "url": test_netcdf_store,
         "variable": "data",
@@ -28,7 +31,7 @@ test_netcdf_store_params = {
     },
     "variables": ["data"],
 }
-test_unconsolidated_store_params = {
+store_params["unconsolidated_store"] = {
     "params": {
         "url": test_unconsolidated_store,
         "variable": "var1",
@@ -37,7 +40,7 @@ test_unconsolidated_store_params = {
     },
     "variables": ["var1", "var2"],
 }
-test_pyramid_store_params = {
+store_params["pyramid_store"] = {
     "params": {
         "url": test_pyramid_store,
         "variable": "value",
@@ -60,20 +63,9 @@ def get_variables_test(app, ds_params):
     assert timings[1].lstrip().startswith("1-xarray-open_dataset;dur=")
 
 
-def test_get_variables_test(app):
-    return get_variables_test(app, test_zarr_store_params)
-
-
-def test_get_variables_netcdf(app):
-    return get_variables_test(app, test_netcdf_store_params)
-
-
-def test_get_variables_unconsolidated(app):
-    return get_variables_test(app, test_unconsolidated_store_params)
-
-
-def test_get_variables_pyramid(app):
-    return get_variables_test(app, test_pyramid_store_params)
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_get_variables(store_params, app):
+    return get_variables_test(app, store_params)
 
 
 def get_info_test(app, ds_params):
@@ -90,20 +82,9 @@ def get_info_test(app, ds_params):
         assert response.json() == json.load(f)
 
 
-def test_get_info_test(app):
-    return get_info_test(app, test_zarr_store_params)
-
-
-def test_get_info_netcdf(app):
-    return get_info_test(app, test_netcdf_store_params)
-
-
-def test_get_info_unconsolidated(app):
-    return get_info_test(app, test_unconsolidated_store_params)
-
-
-def test_get_info_pyramid(app):
-    return get_info_test(app, test_pyramid_store_params)
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_get_info(store_params, app):
+    return get_info_test(app, store_params)
 
 
 def get_tilejson_test(app, ds_params):
@@ -121,20 +102,9 @@ def get_tilejson_test(app, ds_params):
         assert response.json() == json.load(f)
 
 
-def test_get_tilejson_test(app):
-    return get_tilejson_test(app, test_zarr_store_params)
-
-
-def test_get_tilejson_netcdf(app):
-    return get_tilejson_test(app, test_netcdf_store_params)
-
-
-def test_get_tilejson_unconsolidated(app):
-    return get_tilejson_test(app, test_unconsolidated_store_params)
-
-
-def test_get_tilejson_pyramid(app):
-    return get_tilejson_test(app, test_pyramid_store_params)
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_get_tilejson(store_params, app):
+    return get_tilejson_test(app, store_params)
 
 
 def get_tile_test(app, ds_params, zoom: int = 0):
@@ -151,22 +121,14 @@ def get_tile_test(app, ds_params, zoom: int = 0):
     assert timings[2].lstrip().startswith("2-rioxarray-reproject;dur=")
 
 
-def test_get_tile_test(app):
-    return get_tile_test(app, test_zarr_store_params)
-
-
-def test_get_tile_netcdf(app):
-    return get_tile_test(app, test_netcdf_store_params)
-
-
-def test_get_tile_unconsolidated(app):
-    return get_tile_test(app, test_unconsolidated_store_params)
-
-
-def test_get_tile_pyramid(app):
-    # test that even a group outside of the range will return a tile
-    for z in range(3):
-        get_tile_test(app, test_pyramid_store_params, zoom=z)
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_get_tile(store_params, app):
+    # if the store is a pyramid we test zoom levels 0-2
+    if "group" in store_params["params"]:
+        for z in range(3):
+            get_tile_test(app, store_params, zoom=z)
+    else:
+        get_tile_test(app, store_params)
 
 
 def histogram_test(app, ds_params):
@@ -182,20 +144,9 @@ def histogram_test(app, ds_params):
         assert response.json() == json.load(f)
 
 
-def test_histogram_test(app):
-    return histogram_test(app, test_zarr_store_params)
-
-
-def test_histogram_netcdf(app):
-    return histogram_test(app, test_netcdf_store_params)
-
-
-def test_histogram_unconsolidated(app):
-    return histogram_test(app, test_unconsolidated_store_params)
-
-
-def test_histogram_pyramid(app):
-    return histogram_test(app, test_pyramid_store_params)
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_histogram(store_params, app):
+    return histogram_test(app, store_params)
 
 
 def test_histogram_error(app):
