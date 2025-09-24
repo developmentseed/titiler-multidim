@@ -101,6 +101,7 @@ ENV/
 # mypy
 .mypy_cache/
 
+infrastructure/aws/cdk.out/
 cdk.out/
 node_modules
 cdk.context.json
