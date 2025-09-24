@@ -35,8 +35,6 @@ RUN cd /deps && \
   # Remove unnecessary files for Lambda runtime
   find . -type d -a -name 'tests' -print0 | xargs -0 rm -rf && \
   find . -type d -a -name 'test' -print0 | xargs -0 rm -rf && \
-  find . -name '*.dist-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
-  find . -name '*.egg-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
   rm -rf numpy/doc/ bin/ geos_license Misc/ && \
   # Remove unnecessary locale and documentation files
   find . -name '*.mo' -delete && \
