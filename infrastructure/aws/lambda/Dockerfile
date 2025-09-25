@@ -1,7 +1,7 @@
 ARG PYTHON_VERSION=3.12
 
 # Build stage - includes all build tools and dependencies
-FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION} AS builder
+FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} AS builder
 
 # Copy uv for faster dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
