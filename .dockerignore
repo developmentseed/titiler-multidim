@@ -1,6 +1,7 @@
 *
 !src/
 !infrastructure/aws/lambda/*.py
+!infrastructure/aws/lambda/Dockerfile
 !.python-version
 !pyproject.toml
 !README.md
