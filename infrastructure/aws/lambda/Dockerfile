@@ -51,7 +51,7 @@ du -sh . > /tmp/package_size.txt
 EOF
 
 # Final runtime stage - minimal Lambda image optimized for container runtime
-FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
+FROM public.ecr.aws/lambda/python:${PYTHON_VERSION}
 
 # Set Lambda-specific environment variables for optimal performance
 ENV PYTHONPATH=${LAMBDA_RUNTIME_DIR} \
