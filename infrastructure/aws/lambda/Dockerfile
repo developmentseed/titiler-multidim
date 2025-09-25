@@ -72,11 +72,13 @@ COPY --from=builder /tmp/package_size.txt /tmp/
 COPY infrastructure/aws/lambda/handler.py ${LAMBDA_RUNTIME_DIR}/
 
 # Ensure handler is executable and optimize permissions
-RUN chmod 644 ${LAMBDA_RUNTIME_DIR}/handler.py && \
-  # Pre-compile the handler for faster cold starts
-  python -c "import py_compile; py_compile.compile('${LAMBDA_RUNTIME_DIR}/handler.py', doraise=True)" && \
-  # Create cache directories with proper permissions
-  mkdir -p /tmp/.cache && chmod 777 /tmp/.cache
+RUN <<EOF
+chmod 644 "${LAMBDA_RUNTIME_DIR}"/handler.py
+# Pre-compile the handler for faster cold starts
+python -c "import py_compile; py_compile.compile('${LAMBDA_RUNTIME_DIR}/handler.py', doraise=True)"
+# Create cache directories with proper permissions
+mkdir -p /tmp/.cache && chmod 777 /tmp/.cache
+EOF
 
 # Set the Lambda handler
 CMD ["handler.lambda_handler"]
