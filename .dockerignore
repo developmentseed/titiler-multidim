@@ -1,8 +1,6 @@
-*
-!src/
-!infrastructure/aws/lambda/*.py
-!infrastructure/aws/lambda/Dockerfile
-!.python-version
-!pyproject.toml
-!README.md
-!uv.lock
+.git
+infrastructure/aws/cdk.out
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
