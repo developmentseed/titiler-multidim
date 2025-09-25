@@ -45,24 +45,9 @@ handler = Mangum(
     ],
 )
 
-# Global variables for connection reuse across invocations
-_connections_initialized = False
-
-
-def _initialize_connections() -> None:
-    """Initialize connections that can be reused across Lambda invocations."""
-    global _connections_initialized
-    if not _connections_initialized:
-        # Force initialization of any global connections/pools here
-        # This helps with subsequent invocation performance
-        _connections_initialized = True
-
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """Lambda handler with container-specific optimizations."""
-    # Initialize connections on first invocation
-    _initialize_connections()
-
     # Handle the request
     response = handler(event, context)
 
