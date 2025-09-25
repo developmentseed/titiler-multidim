@@ -60,13 +60,8 @@ ENV PYTHONPATH=${LAMBDA_RUNTIME_DIR} \
   AWS_LWA_ENABLE_COMPRESSION=true
 
 # Copy only the cleaned dependencies from builder stage
-COPY --from=builder /deps ${LAMBDA_RUNTIME_DIR}/
-
 # Copy required system library
-COPY --from=builder /usr/lib64/libexpat.so.1 ${LAMBDA_RUNTIME_DIR}/
-
-# Copy package size manifest for debugging
-COPY --from=builder /tmp/package_size.txt /tmp/
+COPY --from=builder /deps /usr/lib64/libexpat.so.1 ${LAMBDA_RUNTIME_DIR}/
 
 # Copy application handler
 COPY infrastructure/aws/lambda/handler.py ${LAMBDA_RUNTIME_DIR}/
