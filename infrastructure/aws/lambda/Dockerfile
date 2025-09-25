@@ -27,25 +27,28 @@ RUN uv export --locked --no-editable --no-dev --extra lambda --format requiremen
   -r requirements.txt
 
 # Aggressive cleanup to minimize size and optimize for Lambda container
-RUN cd /deps && \
-  # Convert .pyc files and remove source .py files for faster cold starts
-  find . -type f -name '*.pyc' | while read f; do n=$(echo $f | sed 's/__pycache__\///' | sed 's/.cpython-[0-9]*//'); cp $f $n; done && \
-  find . -type d -a -name '__pycache__' -print0 | xargs -0 rm -rf && \
-  find . -type f -a -name '*.py' -print0 | xargs -0 rm -f && \
-  # Remove unnecessary files for Lambda runtime
-  find . -type d -a -name 'tests' -print0 | xargs -0 rm -rf && \
-  find . -type d -a -name 'test' -print0 | xargs -0 rm -rf && \
-  rm -rf numpy/doc/ bin/ geos_license Misc/ && \
-  # Remove unnecessary locale and documentation files
-  find . -name '*.mo' -delete && \
-  find . -name '*.po' -delete && \
-  find . -name 'LICENSE*' -delete && \
-  find . -name 'README*' -delete && \
-  find . -name '*.md' -delete && \
-  # Strip debug symbols from shared libraries (preserve numpy.libs)
-  find . -type f -name '*.so*' -not -path "*/numpy.libs/*" -exec strip --strip-unneeded {} \; 2>/dev/null || true && \
-  # Create a manifest file for debugging
-  du -sh . > /tmp/package_size.txt
+WORKDIR /deps
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN <<EOF
+# Convert .pyc files and remove source .py files for faster cold starts
+find . -type f -name '*.pyc' | while read -r f; do n="$(echo "$f" | sed 's/__pycache__\///' | sed 's/.cpython-[0-9]*//')"; cp "$f" "$n"; done
+find . -type d -a -name '__pycache__' -print0 | xargs -0 rm -rf
+find . -type f -a -name '*.py' -print0 | xargs -0 rm -f
+# Remove unnecessary files for Lambda runtime
+find . -type d -a -name 'tests' -print0 | xargs -0 rm -rf
+find . -type d -a -name 'test' -print0 | xargs -0 rm -rf
+rm -rf numpy/doc/ bin/ geos_license Misc/
+# Remove unnecessary locale and documentation files
+find . -name '*.mo' -delete
+find . -name '*.po' -delete
+find . -name 'LICENSE*' -delete
+find . -name 'README*' -delete
+find . -name '*.md' -delete
+# Strip debug symbols from shared libraries (preserve numpy.libs)
+find . -type f -name '*.so*' -not -path "*/numpy.libs/*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
+# Create a manifest file for debugging
+du -sh . > /tmp/package_size.txt
+EOF
 
 # Final runtime stage - minimal Lambda image optimized for container runtime
 FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
