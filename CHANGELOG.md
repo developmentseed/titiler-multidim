@@ -1,5 +1,9 @@
 # Changelog
 
+## unreleased
+
+* Convert Lambda to a containerized function
+
 ## 0.3.1
 
 * Upgrade to `titiler>=0.21,<0.22`

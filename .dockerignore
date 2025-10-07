@@ -1,5 +1,6 @@
-# Ignore cdk folder
-cdk.out
-.history
-.tox
 .git
+infrastructure/aws/cdk.out
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
