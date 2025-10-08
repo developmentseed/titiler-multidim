@@ -11,6 +11,7 @@ test_zarr_store_v3 = os.path.join(DATA_DIR, "zarr_store_v3.zarr")
 test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")
 test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
+test_icechunk_native = os.path.join(DATA_DIR, "icechunk_native")
 
 store_params = {}
 
@@ -27,6 +28,16 @@ store_params["zarr_store_v2"] = {
 store_params["zarr_store_v3"] = {
     "params": {
         "url": test_zarr_store_v3,
+        "variable": "CDD0",
+        "decode_times": False,
+        "sel": "time=0",
+    },
+    "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
+}
+
+store_params["icechunk_native"] = {
+    "params": {
+        "url": test_icechunk_native,
         "variable": "CDD0",
         "decode_times": False,
         "sel": "time=0",
@@ -82,7 +93,6 @@ def test_get_variables(store_params, app):
 
 
 def get_info_test(app, ds_params):
-    print(f"DEBUG: {ds_params=}")
     response = app.get(
         "/info",
         params=ds_params["params"],
@@ -193,7 +203,6 @@ def test_map_without_params(app):
 
 @pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
 def test_map_with_params(store_params, app):
-    print(f"DEBUG: {store_params=}")
     store_path = store_params["params"]["url"]
     variable = store_params["variables"][0]
     response = app.get(
