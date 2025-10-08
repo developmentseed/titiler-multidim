@@ -76,9 +76,9 @@ deployment = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/developmentseed/titiler-xarray"
-Issues = "https://github.com/developmentseed/titiler-xarray/issues"
-Source = "https://github.com/developmentseed/titiler-xarray"
+Homepage = "https://github.com/developmentseed/titiler-multidim"
+Issues = "https://github.com/developmentseed/titiler-multidim/issues"
+Source = "https://github.com/developmentseed/titiler-multidim"
 
 [tool.coverage.run]
 branch = true
