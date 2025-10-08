@@ -78,6 +78,11 @@ deployment = [
     "pydantic-settings~=2.0",
     "python-dotenv>=1.0.1",
 ]
+notebooks = [
+    "folium",
+    "httpx",
+    "matplotlib",
+]
 
 [project.urls]
 Homepage = "https://github.com/developmentseed/titiler-xarray"
