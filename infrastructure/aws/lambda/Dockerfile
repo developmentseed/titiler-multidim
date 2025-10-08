@@ -7,7 +7,7 @@ FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Install system dependencies needed for compilation
-RUN dnf install -y gcc-c++ && dnf clean all
+RUN dnf install -y gcc-c++ git && dnf clean all
 
 # Set working directory for build
 WORKDIR /build
