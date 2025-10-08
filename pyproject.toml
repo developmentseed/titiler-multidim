@@ -25,7 +25,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "titiler.core>=0.23.0,<0.25",
+    "titiler-core>=0.23.0,<0.25",
     "titiler-xarray>=0.23.0,<0.25",
     "aiohttp",
     "aiobotocore>=2.24.0",
@@ -84,6 +84,7 @@ Source = "https://github.com/developmentseed/titiler-xarray"
 
 [tool.uv.sources]
 titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
+titiler-core = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/core" }
 
 [tool.coverage.run]
 branch = true
