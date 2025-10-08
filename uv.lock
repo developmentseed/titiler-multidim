@@ -2252,7 +2252,7 @@ wheels = [
 
 [[package]]
 name = "rio-tiler"
-version = "7.9.0"
+version = "7.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -2267,9 +2267,9 @@ dependencies = [
     { name = "rasterio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/a8/b2c1c3b4504538040782d3d1b282b4f4f5666149432eb3f4b85a5ea231e1/rio_tiler-7.9.0.tar.gz", hash = "sha256:2587c8ae4162e5dffce2fa2fb4779cffedb2006691687189f2b3644c96748b57", size = 175702, upload-time = "2025-10-07T12:23:49.195Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/25/5dd97df25a3d4b43e722cb762fafa9003dd81059fbcecf02a1c89438f721/rio_tiler-7.8.1.tar.gz", hash = "sha256:c6b6228fa55b5de4c9eb36bed4decd888dac5d34d7140a99d2e0f04644580a0b", size = 175021, upload-time = "2025-06-16T20:10:04.256Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/54/4cd91363d54c6820954273e471c9b54c109a625e98e71fd2d6ed13c0fd66/rio_tiler-7.9.0-py3-none-any.whl", hash = "sha256:03b46df03a656a39e42812c1e30fd1639e7caf61bc1c280b3e4ced3665e0c02c", size = 269850, upload-time = "2025-10-07T12:23:47.893Z" },
+    { url = "https://files.pythonhosted.org/packages/39/16/8a35212bb8433528e07d52bd1f56f193bed74666019b5e46f6bed9436bb4/rio_tiler-7.8.1-py3-none-any.whl", hash = "sha256:574c0d185145753e15128b0a8c47b6033ef876eba7c630b562182e72c0e848a3", size = 269098, upload-time = "2025-06-16T20:10:05.72Z" },
 ]
 
 [[package]]
@@ -2437,6 +2437,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "redis" },
     { name = "requests" },
+    { name = "rio-tiler" },
     { name = "rioxarray" },
     { name = "s3fs" },
     { name = "titiler-core" },
@@ -2493,6 +2494,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "~=2.0" },
     { name = "redis" },
     { name = "requests" },
+    { name = "rio-tiler", specifier = "==7.8.1" },
     { name = "rioxarray" },
     { name = "s3fs" },
     { name = "titiler-core", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader" },
