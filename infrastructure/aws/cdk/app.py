@@ -14,6 +14,7 @@ from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
+from aws_cdk.aws_ecr_assets import Platform
 from config import AppSettings, StackSettings
 from constructs import Construct
 
@@ -121,19 +122,14 @@ class LambdaStack(Stack):
             role_arn=app_settings.reader_role_arn,
         )
 
-        lambda_function = aws_lambda.Function(
+        lambda_function = aws_lambda.DockerImageFunction(
             self,
             f"{id}-lambda",
-            runtime=runtime,
-            code=aws_lambda.Code.from_docker_build(
-                path=os.path.abspath(context_dir),
+            code=aws_lambda.DockerImageCode.from_image_asset(
+                directory=os.path.abspath(context_dir),
                 file="infrastructure/aws/lambda/Dockerfile",
-                platform="linux/amd64",
-                build_args={
-                    "PYTHON_VERSION": runtime.to_string().replace("python", ""),
-                },
+                platform=Platform.LINUX_AMD64,
             ),
-            handler="handler.handler",
             memory_size=memory,
             reserved_concurrent_executions=concurrent,
             timeout=Duration.seconds(timeout),
