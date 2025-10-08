@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 # This fixture will automatically parametrize ALL tests that use it
 @pytest.fixture(
     params=[
-        # pytest.param({"cache": True}, id="with_cache"), #TODO: re-enable when caching is fixed
+        pytest.param({"cache": True}, id="with_cache"),
         pytest.param({"cache": False}, id="without_cache"),
     ]
 )

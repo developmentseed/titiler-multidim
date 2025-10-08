@@ -2475,7 +2475,7 @@ requires-dist = [
     { name = "titiler-core", specifier = ">=0.23.0,<0.25" },
     { name = "titiler-xarray", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader" },
     { name = "uvicorn", marker = "extra == 'server'" },
-    { name = "xarray", specifier = ">2025.7.1" },
+    { name = "xarray", specifier = ">=2025.10.1" },
     { name = "zarr", specifier = ">3.1.0" },
 ]
 provides-extras = ["server", "lambda"]

@@ -41,7 +41,7 @@ dependencies = [
     "requests",
     "rioxarray",
     "s3fs",
-    "xarray>2025.07.1",
+    "xarray>=2025.10.1",
     "zarr>3.1.0",
     "icechunk>=1.1.9",
 ]
