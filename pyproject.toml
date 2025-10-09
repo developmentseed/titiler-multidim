@@ -39,7 +39,6 @@ dependencies = [
     "pydantic>=2.4,<3.0",
     "redis",
     "requests",
-    "rio-tiler==7.8.1", #see https://github.com/developmentseed/titiler-multidim/pull/96#issuecomment-3383102442
     "rioxarray",
     "s3fs",
     "xarray>=2025.10.1",
