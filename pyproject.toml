@@ -91,10 +91,11 @@ Issues = "https://github.com/developmentseed/titiler-xarray/issues"
 Source = "https://github.com/developmentseed/titiler-xarray"
 
 [tool.uv.sources]
-#titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
-#titiler-core = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/core" }
-titiler-xarray = { path = "../titiler/src/titiler/xarray", editable = true }
-titiler-core = { path = "../titiler/src/titiler/core", editable = true }
+titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
+titiler-core = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/core" }
+# For local testing: TODO revert to merged titiler feature
+#titiler-xarray = { path = "../titiler/src/titiler/xarray", editable = true }
+#titiler-core = { path = "../titiler/src/titiler/core", editable = true }
 
 [tool.coverage.run]
 branch = true
