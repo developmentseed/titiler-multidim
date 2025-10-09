@@ -12,6 +12,7 @@ test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")
 test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
 test_icechunk_native = os.path.join(DATA_DIR, "icechunk_native")
+test_icechunk_virtual_accessible = os.path.join(DATA_DIR, "icechunk_virtual_accessible")
 
 store_params = {}
 
@@ -43,6 +44,27 @@ store_params["icechunk_native"] = {
         "sel": "time=0",
     },
     "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
+}
+
+store_params["icechunk_virtual_accessible"] = {
+    "params": {
+        "url": test_icechunk_virtual_accessible,
+        "variable": "LWdown",
+        "decode_times": False,
+        "sel": "time=1.0",
+    },
+    "variables": [
+        "LWdown",
+        "Wind_N",
+        "Tair",
+        "Rainf",
+        "Wind_E",
+        "Qair",
+        "Tair_max",
+        "Tair_min",
+        "SWdown",
+        "PSurf",
+    ],
 }
 
 store_params["netcdf_store"] = {

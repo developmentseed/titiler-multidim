@@ -1,0 +1,21 @@
+{
+  "tilejson": "2.2.0",
+  "version": "1.0.0",
+  "scheme": "xyz",
+  "tiles": [
+    "http://testserver/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?url=tests%2Ffixtures%2Ficechunk_virtual_accessible&variable=LWdown&decode_times=false&sel=time%3D1.0"
+  ],
+  "minzoom": 1,
+  "maxzoom": 7,
+  "bounds": [
+    -168.9999951170962,
+    7.000000114825381,
+    -51.99999725350927,
+    71.99999511680303
+  ],
+  "center": [
+    -110.49999618530273,
+    39.49999761581421,
+    1
+  ]
+}

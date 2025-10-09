@@ -71,6 +71,8 @@ dev = [
     "pytest-xdist",
     "uvicorn>=0.34.0",
     "yappi>=1.6.0",
+    "virtualizarr",
+    "obstore",
 ]
 deployment = [
     "aws-cdk-lib~=2.177.0",
@@ -90,8 +92,10 @@ Issues = "https://github.com/developmentseed/titiler-xarray/issues"
 Source = "https://github.com/developmentseed/titiler-xarray"
 
 [tool.uv.sources]
-titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
-titiler-core = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/core" }
+#titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
+#titiler-core = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/core" }
+titiler-xarray = { path = "../titiler/src/titiler/xarray", editable = true }
+titiler-core = { path = "../titiler/src/titiler/core", editable = true }
 
 [tool.coverage.run]
 branch = true
