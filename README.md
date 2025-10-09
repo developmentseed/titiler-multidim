@@ -14,6 +14,8 @@ Example of application built with `titiler.xarray` [package](https://development
 # It's recommended to install dependencies in a virtual environment
 uv sync --dev
 export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
+#optional: Disable caching
+#export TITILER_MULTIDIM_ENABLE_CACHE=false
 uv run uvicorn titiler.multidim.main:app --reload
 ```
 
@@ -94,3 +96,4 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
 
 In AWS Lambda environment we need to have specific version of botocore, S3FS, FSPEC and other libraries.
 To make sure the application will both work locally and in AWS Lambda environment you can install the dependencies using `python -m pip install -r infrastructure/aws/requirement-lambda.txt`
+

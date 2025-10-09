@@ -105,3 +105,4 @@ cdk.out/
 node_modules
 cdk.context.json
 *.nc
+.DS_Store
