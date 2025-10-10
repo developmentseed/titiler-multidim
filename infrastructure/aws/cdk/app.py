@@ -138,12 +138,14 @@ class LambdaStack(Stack):
                 **environment,
                 "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
                 "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+                "OTEL_TRACES_ENABLED": "true",
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
+            tracing=aws_lambda.Tracing.ACTIVE,
         )
 
         for perm in permissions:

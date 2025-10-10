@@ -4,10 +4,25 @@ import logging
 import warnings
 from typing import Any, Dict
 
-from mangum import Mangum
+# Initialize OpenTelemetry BEFORE importing the FastAPI app
+from otel_config import setup_otel
 
-from titiler.multidim.main import app
+setup_otel()
 
+from mangum import Mangum  # noqa: E402
+
+from titiler.multidim.main import app  # noqa: E402
+
+# Configure root logger to WARN level by default
+logging.basicConfig(
+    level=logging.WARN,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+# Set titiler loggers to INFO level
+logging.getLogger("titiler").setLevel(logging.INFO)
+
+# Keep specific loggers at ERROR/WARNING levels
 logging.getLogger("mangum.lifespan").setLevel(logging.ERROR)
 logging.getLogger("mangum.http").setLevel(logging.ERROR)
 logging.getLogger("botocore").setLevel(logging.WARNING)

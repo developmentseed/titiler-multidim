@@ -81,8 +81,9 @@ app.add_middleware(
     exclude_path={r"/healthz"},
 )
 
+app.add_middleware(LoggerMiddleware)
+
 if api_settings.debug:
-    app.add_middleware(LoggerMiddleware)
     app.add_middleware(TotalTimeMiddleware)
     app.add_middleware(
         ServerTimingMiddleware,

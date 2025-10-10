@@ -63,8 +63,8 @@ ENV PYTHONPATH=${LAMBDA_RUNTIME_DIR} \
 # Copy required system library
 COPY --from=builder /deps /usr/lib64/libexpat.so.1 ${LAMBDA_RUNTIME_DIR}/
 
-# Copy application handler
-COPY infrastructure/aws/lambda/handler.py ${LAMBDA_RUNTIME_DIR}/
+# Copy application handler and OpenTelemetry configuration
+COPY infrastructure/aws/lambda/handler.py infrastructure/aws/lambda/otel_config.py ${LAMBDA_RUNTIME_DIR}/
 
 # Ensure handler is executable and optimize permissions
 RUN <<EOF
