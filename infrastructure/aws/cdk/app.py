@@ -43,7 +43,6 @@ class LambdaStack(Stack):
         id: str,
         memory: int = 1024,
         timeout: int = 30,
-        runtime: aws_lambda.Runtime = aws_lambda.Runtime.PYTHON_3_12,
         concurrent: Optional[int] = None,
         permissions: Optional[List[iam.PolicyStatement]] = None,
         environment: Optional[Dict] = None,
@@ -138,7 +137,12 @@ class LambdaStack(Stack):
                 **environment,
                 "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
                 "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
-                "OTEL_TRACES_ENABLED": "true",
+                "OTEL_METRICS_EXPORTER": "none",  # Disable metrics - only using traces
+                "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS": "aws-lambda,requests,urllib3,aiohttp-client",  # Disable aws-lambda auto-instrumentation (handled by otel_wrapper.py)
+                "OTEL_PROPAGATORS": "tracecontext,baggage,xray",
+                "OPENTELEMETRY_COLLECTOR_CONFIG_URI": "/opt/collector-config/config.yaml",
+                "AWS_LAMBDA_LOG_FORMAT": "JSON",
+                "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",  # Enable OTEL wrapper to avoid circular import
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
@@ -208,6 +212,17 @@ if app_settings.buckets:
             resources=[f"arn:aws:s3:::{bucket}*" for bucket in app_settings.buckets],
         )
     )
+
+# Add X-Ray permissions for tracing
+perms.append(
+    iam.PolicyStatement(
+        actions=[
+            "xray:PutTraceSegments",
+            "xray:PutTelemetryRecords",
+        ],
+        resources=["*"],
+    )
+)
 
 
 lambda_stack = LambdaStack(

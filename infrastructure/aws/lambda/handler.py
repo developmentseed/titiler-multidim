@@ -1,22 +1,20 @@
-"""AWS Lambda handler optimized for container runtime."""
+"""AWS Lambda handler optimized for container runtime with OTEL instrumentation."""
 
 import logging
 import warnings
 from typing import Any, Dict
 
-# Initialize OpenTelemetry BEFORE importing the FastAPI app
-from otel_config import setup_otel
+from mangum import Mangum
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
-setup_otel()
-
-from mangum import Mangum  # noqa: E402
-
-from titiler.multidim.main import app  # noqa: E402
+from titiler.multidim.main import app
 
 # Configure root logger to WARN level by default
+# Use simple format - AWS Lambda will handle JSON formatting when AWS_LAMBDA_LOG_FORMAT=JSON
 logging.basicConfig(
     level=logging.WARN,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="[%(levelname)s] %(name)s: %(message)s",
 )
 
 # Set titiler loggers to INFO level
@@ -31,15 +29,8 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-
-# Pre-import commonly used modules for faster cold starts
-try:
-    import numpy  # noqa: F401
-    import pandas  # noqa: F401
-    import rioxarray  # noqa: F401
-    import xarray  # noqa: F401
-except ImportError:
-    pass
+LoggingInstrumentor().instrument(set_logging_format=False)
+FastAPIInstrumentor.instrument_app(app)
 
 handler = Mangum(
     app,
@@ -55,10 +46,5 @@ handler = Mangum(
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """Lambda handler with container-specific optimizations."""
-    response = handler(event, context)
-
-    return response
-
-
-handler.lambda_handler = lambda_handler
+    """Lambda handler with container-specific optimizations and OTEL tracing."""
+    return handler(event, context)

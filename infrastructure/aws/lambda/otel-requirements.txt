@@ -1,0 +1,4 @@
+aws-opentelemetry-distro>=0.12.1
+opentelemetry-instrumentation-botocore
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-logging
