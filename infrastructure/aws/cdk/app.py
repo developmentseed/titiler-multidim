@@ -141,7 +141,7 @@ class LambdaStack(Stack):
                 "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS": "aws-lambda,requests,urllib3,aiohttp-client",  # Disable aws-lambda auto-instrumentation (handled by otel_wrapper.py)
                 "OTEL_PROPAGATORS": "tracecontext,baggage,xray",
                 "OPENTELEMETRY_COLLECTOR_CONFIG_URI": "/opt/collector-config/config.yaml",
-                "AWS_LAMBDA_LOG_FORMAT": "JSON",
+                # AWS_LAMBDA_LOG_FORMAT not set - using custom JSON formatter in handler.py
                 "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",  # Enable OTEL wrapper to avoid circular import
             },
             log_retention=logs.RetentionDays.ONE_WEEK,
