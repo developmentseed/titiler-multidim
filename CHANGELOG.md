@@ -2,8 +2,22 @@
 
 ## unreleased
 
+* nothing
+
+# 0.6.0
+
 * Convert Lambda to a containerized function
 * Enable OpenTelemetry + X-Ray tracing
+
+## 0.5.0
+
+* Add ipykernel and uvicorn to uv --dev by @maxrjones in https://github.com/developmentseed/titiler-multidim/pull/91
+* deps: upgrade titiler, Python 3.12, boto3/botocore/aiobotocore by @hrodmn in https://github.com/developmentseed/titiler-multidim/pull/93
+* chore: add action to deploy the dev stack by @hrodmn in https://github.com/developmentseed/titiler-multidim/pull/94
+
+## 0.4.0
+
+* add custom host + root_path config by @hrodmn in https://github.com/developmentseed/titiler-multidim/pull/87
 
 ## 0.3.1
 
