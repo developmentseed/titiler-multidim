@@ -3,6 +3,7 @@
 ## unreleased
 
 * Convert Lambda to a containerized function
+* Enable OpenTelemetry + X-Ray tracing
 
 ## 0.3.1
 
