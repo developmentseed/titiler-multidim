@@ -1,15 +1,17 @@
 ARG PYTHON_VERSION=3.12
 
-# Stage 1: Build dependencies
-
-# Download the OpenTelemetry Layer with AppSignals Support:
+# Stage 1: OTEL
+# Download the OpenTelemetry layer
+# ref: https://github.com/athewsey/opentelemetry-lambda-container/blob/98069d5eb6d812ccd28d5c80e2f9d6c8a8c76fb9/python-example/lambda-function/Dockerfile
 FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} as otel-builder
-RUN dnf install -y unzip wget && \
-  wget https://github.com/aws-observability/aws-otel-python-instrumentation/releases/latest/download/layer.zip -O /tmp/layer.zip && \
-  mkdir -p /opt-builder && \
-  unzip /tmp/layer.zip -d /opt-builder/
+RUN <<EOF
+dnf install -y unzip wget
+wget https://github.com/aws-observability/aws-otel-python-instrumentation/releases/download/v0.12.1/layer.zip -O /tmp/layer.zip
+mkdir -p /opt-builder
+unzip /tmp/layer.zip -d /opt-builder/
+EOF
 
-# install python dependencies
+# Stage 2: titiler-multidim application and dependencies
 FROM public.ecr.aws/lambda/python:${PYTHON_VERSION} AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -20,26 +22,16 @@ WORKDIR /build
 COPY README.md uv.lock .python-version pyproject.toml ./
 COPY src/titiler/ ./src/titiler/
 
-COPY infrastructure/aws/lambda/otel-requirements.txt ./
-
-# Install dependencies to temporary directory with Lambda-specific optimizations
-# Install OTEL packages to /opt/python (where otel-instrument wrapper expects them)
-RUN uv pip install \
-  --target /opt-python \
-  --no-cache-dir \
-  --disable-pip-version-check \
-  -r otel-requirements.txt
-
-# Install app packages (excluding OTEL packages since they're already installed)
-RUN uv export --locked --no-editable --no-dev --extra lambda --format requirements.txt -o requirements.txt && \
-  uv pip install \
+RUN <<EOF
+uv export --locked --no-editable --no-dev --extra lambda --format requirements.txt -o requirements.txt
+uv pip install \
   --compile-bytecode \
   --no-binary pydantic \
   --target /deps \
   --no-cache-dir \
   --disable-pip-version-check \
   -r requirements.txt
-
+EOF
 
 # Aggressive cleanup to minimize size and optimize for Lambda container
 # Clean up app dependencies in /deps
@@ -62,50 +54,20 @@ find . -name 'README*' -delete
 find . -name '*.md' -delete
 # Strip debug symbols from shared libraries (preserve numpy.libs)
 find . -type f -name '*.so*' -not -path "*/numpy.libs/*" -exec strip --strip-unneeded {} \; 2>/dev/null || true
-# Create a manifest file for debugging
-du -sh . > /tmp/package_size.txt
-EOF
-
-# Clean up OTEL dependencies in /opt-python (lighter cleanup to preserve CLI tools)
-WORKDIR /opt-python
-RUN <<EOF
-# Remove test files and docs
-find . -type d -a -name 'tests' -print0 | xargs -0 rm -rf
-find . -type d -a -name 'test' -print0 | xargs -0 rm -rf
-# Keep bin/ directory for opentelemetry-instrument CLI
-find . -name '*.mo' -delete
-find . -name '*.po' -delete
-find . -name 'LICENSE*' -delete
-find . -name 'README*' -delete
-find . -name '*.md' -delete
 EOF
 
 # Stage 3: Final runtime stage - minimal Lambda image optimized for container runtime
 FROM public.ecr.aws/lambda/python:${PYTHON_VERSION}
 
-# Set Lambda-specific environment variables for optimal performance
-# PYTHONPATH includes both /opt/python (OTEL packages) and LAMBDA_RUNTIME_DIR (app packages)
 ENV PYTHONUNBUFFERED=1 \
   PYTHONDONTWRITEBYTECODE=1
 
-# Copy OTEL code
 COPY --from=otel-builder /opt-builder/ /opt/
 COPY infrastructure/aws/lambda/collector-config.yaml /opt/collector-config/config.yaml
-
-# Copy dependencies from builder stage
-# OTEL packages to /opt/python (includes opentelemetry-instrument CLI)
-COPY --from=builder /opt-python /opt/python
-
-# App packages to LAMBDA_RUNTIME_DIR
 COPY --from=builder /deps ${LAMBDA_RUNTIME_DIR}/
-
-# Copy required system library
 COPY --from=builder /usr/lib64/libexpat.so.1 ${LAMBDA_RUNTIME_DIR}/
-
-# Copy application handler and OpenTelemetry configuration
 COPY infrastructure/aws/lambda/handler.py ${LAMBDA_RUNTIME_DIR}/
 
-# Ensure handler is executable and optimize permissions
 RUN <<EOF
 chmod 644 "${LAMBDA_RUNTIME_DIR}"/handler.py
 chmod -R 755 /opt/
