@@ -1,0 +1,38 @@
+extensions:
+  # AWS Proxy extension - forwards X-Ray segments to local X-Ray daemon via UDP
+  # This avoids the awsxray exporter making HTTPS API calls
+  awsproxy:
+    endpoint: 127.0.0.1:2000
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 50
+
+exporters:
+  # Export to AWS X-Ray via local X-Ray daemon (UDP, no internet required)
+  # The awsproxy extension bridges the collector to the daemon at 127.0.0.1:2000
+  awsxray:
+    endpoint: http://127.0.0.1:2000
+    local_mode: true  # Use local X-Ray daemon instead of direct API calls
+    index_all_attributes: true
+
+  # Debug exporter to see traces in CloudWatch logs
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [awsproxy]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, awsxray]

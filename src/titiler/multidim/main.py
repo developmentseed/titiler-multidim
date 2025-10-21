@@ -38,7 +38,9 @@ app = FastAPI(
 
 ###############################################################################
 # Tiles endpoints
-xarray_factory = XarrayTilerFactory()
+xarray_factory = XarrayTilerFactory(
+    enable_telemetry=True  # Always enable telemetry when using OTEL
+)
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
 
 ###############################################################################
@@ -81,8 +83,9 @@ app.add_middleware(
     exclude_path={r"/healthz"},
 )
 
+app.add_middleware(LoggerMiddleware)
+
 if api_settings.debug:
-    app.add_middleware(LoggerMiddleware)
     app.add_middleware(TotalTimeMiddleware)
     app.add_middleware(
         ServerTimingMiddleware,

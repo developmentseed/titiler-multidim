@@ -106,3 +106,5 @@ node_modules
 cdk.context.json
 *.nc
 .DS_Store
+
+.test-deploy-env

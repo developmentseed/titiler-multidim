@@ -52,7 +52,7 @@ server = [
 ]
 lambda = [
     "mangum==0.19.0",
-    "aiobotocore>=2.24.0,<2.24.2"
+    "aiobotocore>=2.24.0,<2.24.2",
 ]
 
 [dependency-groups]
@@ -86,9 +86,9 @@ notebooks = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/developmentseed/titiler-xarray"
-Issues = "https://github.com/developmentseed/titiler-xarray/issues"
-Source = "https://github.com/developmentseed/titiler-xarray"
+Homepage = "https://github.com/developmentseed/titiler-multidim"
+Issues = "https://github.com/developmentseed/titiler-multidim/issues"
+Source = "https://github.com/developmentseed/titiler-multidim"
 
 [tool.uv.sources]
 titiler-xarray = { git = "https://github.com/jbusecke/titiler.git", branch = "jbusecke-icechunk-reader", subdirectory = "src/titiler/xarray" }
