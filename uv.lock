@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -2854,7 +2854,7 @@ wheels = [
 [[package]]
 name = "titiler-core"
 version = "0.24.0"
-source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader#f08c0ce53484dc3fce7ad96434714c14e9be84e3" }
+source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader#0c7ce7f017334369ad3f2fd9e70beb309c23a32e" }
 dependencies = [
     { name = "fastapi" },
     { name = "geojson-pydantic" },
@@ -2992,7 +2992,7 @@ notebooks = [
 [[package]]
 name = "titiler-xarray"
 version = "0.24.0"
-source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader#f08c0ce53484dc3fce7ad96434714c14e9be84e3" }
+source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader#0c7ce7f017334369ad3f2fd9e70beb309c23a32e" }
 dependencies = [
     { name = "rio-tiler" },
     { name = "rioxarray" },
