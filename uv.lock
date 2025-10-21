@@ -2821,7 +2821,8 @@ wheels = [
 
 [[package]]
 name = "titiler-core"
-source = { editable = "../titiler/src/titiler/core" }
+version = "0.24.0"
+source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader#9785a2cfe7f331101b297b62c0b15f70e0c58d3f" }
 dependencies = [
     { name = "fastapi" },
     { name = "geojson-pydantic" },
@@ -2834,30 +2835,6 @@ dependencies = [
     { name = "simplejson" },
     { name = "typing-extensions" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.108.0" },
-    { name = "geojson-pydantic", specifier = ">=1.1.2,<3.0" },
-    { name = "httpx", marker = "extra == 'test'" },
-    { name = "jinja2", specifier = ">=2.11.2,<4.0.0" },
-    { name = "morecantile" },
-    { name = "numpy" },
-    { name = "opentelemetry-api", marker = "extra == 'telemetry'" },
-    { name = "opentelemetry-exporter-otlp", marker = "extra == 'telemetry'" },
-    { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'telemetry'" },
-    { name = "opentelemetry-instrumentation-logging", marker = "extra == 'telemetry'" },
-    { name = "opentelemetry-sdk", marker = "extra == 'telemetry'" },
-    { name = "pydantic", specifier = "~=2.0" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-asyncio", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rasterio" },
-    { name = "rio-tiler", specifier = ">=7.7,<8.0" },
-    { name = "simplejson" },
-    { name = "typing-extensions", specifier = ">=4.6.1" },
-]
-provides-extras = ["test", "telemetry"]
 
 [[package]]
 name = "titiler-multidim"
@@ -2942,8 +2919,8 @@ requires-dist = [
     { name = "requests" },
     { name = "rioxarray" },
     { name = "s3fs" },
-    { name = "titiler-core", editable = "../titiler/src/titiler/core" },
-    { name = "titiler-xarray", editable = "../titiler/src/titiler/xarray" },
+    { name = "titiler-core", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader" },
+    { name = "titiler-xarray", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "xarray", specifier = ">=2025.10.1" },
     { name = "zarr", specifier = ">3.1.0" },
@@ -2982,44 +2959,14 @@ notebooks = [
 
 [[package]]
 name = "titiler-xarray"
-source = { editable = "../titiler/src/titiler/xarray" }
+version = "0.24.0"
+source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader#9785a2cfe7f331101b297b62c0b15f70e0c58d3f" }
 dependencies = [
     { name = "rio-tiler" },
     { name = "rioxarray" },
     { name = "titiler-core" },
     { name = "xarray" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", marker = "extra == 'full'" },
-    { name = "aiohttp", marker = "extra == 'http'" },
-    { name = "aiohttp", marker = "extra == 'test'" },
-    { name = "fsspec", marker = "extra == 'full'" },
-    { name = "fsspec", marker = "extra == 'minimal'" },
-    { name = "fsspec", marker = "extra == 'test'" },
-    { name = "gcsfs", marker = "extra == 'full'" },
-    { name = "gcsfs", marker = "extra == 'gcs'" },
-    { name = "h5netcdf", marker = "extra == 'full'" },
-    { name = "h5netcdf", marker = "extra == 'minimal'" },
-    { name = "h5netcdf", marker = "extra == 'test'" },
-    { name = "httpx", marker = "extra == 'test'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-asyncio", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "requests", marker = "extra == 'test'" },
-    { name = "rio-tiler", specifier = ">=7.6.1,<8.0" },
-    { name = "rioxarray" },
-    { name = "s3fs", marker = "extra == 'full'" },
-    { name = "s3fs", marker = "extra == 's3'" },
-    { name = "s3fs", marker = "extra == 'test'" },
-    { name = "titiler-core", specifier = "==0.24.0" },
-    { name = "xarray" },
-    { name = "zarr", marker = "extra == 'full'", specifier = "!=3.0.9" },
-    { name = "zarr", marker = "extra == 'minimal'", specifier = "!=3.0.9" },
-    { name = "zarr", marker = "extra == 'test'", specifier = "!=3.0.9" },
-]
-provides-extras = ["full", "minimal", "gcs", "s3", "http", "test"]
 
 [[package]]
 name = "toolz"
