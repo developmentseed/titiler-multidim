@@ -72,6 +72,8 @@ dev = [
     "yappi>=1.6.0",
     "virtualizarr",
     "obstore",
+    "minio",
+    "docker",
 ]
 deployment = [
     "aws-cdk-lib~=2.177.0",
@@ -154,3 +156,4 @@ excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"
+pythonpath = ["src"]
