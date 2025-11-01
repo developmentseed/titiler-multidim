@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -2853,8 +2853,8 @@ wheels = [
 
 [[package]]
 name = "titiler-core"
-version = "0.24.0"
-source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader#0c7ce7f017334369ad3f2fd9e70beb309c23a32e" }
+version = "0.24.2"
+source = { git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=main#899f104ddd40f3e8a1a36da487d3825e04da68bd" }
 dependencies = [
     { name = "fastapi" },
     { name = "geojson-pydantic" },
@@ -2951,8 +2951,8 @@ requires-dist = [
     { name = "requests" },
     { name = "rioxarray" },
     { name = "s3fs" },
-    { name = "titiler-core", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=jbusecke-icechunk-reader" },
-    { name = "titiler-xarray", git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader" },
+    { name = "titiler-core", git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=main" },
+    { name = "titiler-xarray", git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=main" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "xarray", specifier = ">=2025.10.1" },
     { name = "zarr", specifier = ">3.1.0" },
@@ -2991,8 +2991,8 @@ notebooks = [
 
 [[package]]
 name = "titiler-xarray"
-version = "0.24.0"
-source = { git = "https://github.com/jbusecke/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=jbusecke-icechunk-reader#0c7ce7f017334369ad3f2fd9e70beb309c23a32e" }
+version = "0.24.2"
+source = { git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=main#899f104ddd40f3e8a1a36da487d3825e04da68bd" }
 dependencies = [
     { name = "rio-tiler" },
     { name = "rioxarray" },
