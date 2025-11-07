@@ -129,6 +129,7 @@ ignore = [
 
 [tool.ruff.per-file-ignores]
 "tests/test_app.py" = ["D1"]
+"tests/test_reader.py" = ["D1"]
 "tests/fixtures/generate_test_zarr.py" = ["D1"]
 "tests/fixtures/generate_test_reference.py" = ["D1"]
 
@@ -156,4 +157,4 @@ excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]

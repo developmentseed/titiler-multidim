@@ -11,7 +11,7 @@ import xarray as xr
 
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
-from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
+from titiler.xarray.io import Reader, get_variable
 
 try:
     import icechunk
@@ -22,6 +22,11 @@ try:
     import fsspec
 except ImportError:  # pragma: nocover
     fsspec = None  # type: ignore
+
+try:
+    import obstore
+except ImportError:  # pragma: nocover
+    obstore = None  # type: ignore
 
 try:
     import h5netcdf
@@ -104,29 +109,101 @@ def opener_icechunk(
     )
 
 
+# this is my hacky way of using obstore here, might want to check if there is a better way.
+def _is_dir(store, path: str = "") -> bool:  # TODO: type this properly.
+    """Return True if path is a prefix containing any objects (directory-like)."""
+    # sanitize path and slashes
+    path = path.rstrip("/") + "/"
+    stream = store.list(prefix=path, chunk_size=1)
+    try:
+        batch = next(stream)
+        return len(batch) > 0
+    except StopIteration:
+        return False
+
+
+def identify_storage_backend(src_path: str) -> str:
+    """Identify the storage backend for a given path."""
+    parsed = urlparse(src_path)
+    protocol = parsed.scheme or "file"
+
+    if protocol == "file":
+        store = obstore.store.LocalStore(src_path)
+    elif protocol == "s3":
+        print(os.environ.get("AWS_ENDPOINT_URL"))
+        store = obstore.store.S3Store(
+            bucket=parsed.netloc,
+            prefix=parsed.path.lstrip("/"),
+            endpoint_url=os.environ.get("AWS_ENDPOINT_URL", None),
+        )
+    else:
+        raise NotImplementedError(
+            f"Storage backend identification for protocol {protocol} is not implemented"
+        )
+
+    is_dir = _is_dir(store)
+    if not is_dir:
+        # assume this is a file, and detect the format based on the file extension
+        _, ext = os.path.splitext(parsed.path)
+        if ext in [".nc", ".nc4"]:
+            format = "h5netcdf"
+        else:
+            raise NotImplementedError(
+                f"File format identification for extension {ext} is not implemented"
+            )
+    else:
+        has_manifests = _is_dir(store, "manifests")
+        if has_manifests:
+            format = "icechunk"
+        else:
+            format = "zarr"
+    return format
+
+
 def guess_opener(
     src_path: str,
     group: Optional[Any] = None,
     decode_times: bool = True,
     **kwargs: Any,
 ) -> xr.Dataset:
-    """Guess the appropriate opener based on the file extension."""
-    # for now simply try the icechunk opener and if it fails, fall back to xarray open_dataset.
-    # In the future we may want to be more specific about which opener to use either based on a config or some other heuristic
+    """Guess the storage backend and return an xarray Dataset"""
+    pass
 
-    if os.path.isdir(src_path) and os.path.exists(os.path.join(src_path, "manifests")):
-        return opener_icechunk(
-            src_path,
-            group=group,
-            decode_times=decode_times,
-            authorize_virtual_chunk_access=settings[
-                "authorized_chunk_access"
-            ],  # TODO this needs to be moved further up the stack so it can be passed in from the API call or some other config. For now we hardcode it here for testing purposes.
-        )
-    else:
-        return xarray_open_dataset(
-            src_path, group=group, decode_times=decode_times, **kwargs
-        )
+
+#     """Guess the appropriate opener based on the file extension."""
+#     # for now simply try the icechunk opener and if it fails, fall back to xarray open_dataset.
+#     # In the future we may want to be more specific about which opener to use either based on a config or some other heuristic
+
+#             s3_endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+#             if s3_endpoint_url:
+#                 # Check if the endpoint URL starts with 'http://' to determine if SSL should be disabled.
+#                 # This is necessary for local S3-compatible services like Minio that might not use HTTPS.
+#                 disable_ssl = s3_endpoint_url.startswith("http://")
+#                 store = obstore.Store.from_url(src_path, endpoint_url=s3_endpoint_url, disable_ssl=disable_ssl)
+#             else:
+#                 store = obstore.Store.from_url(src_path)        is_dir = store.is_dir("")
+#         manifests_exist = store.is_dir("manifests")
+#         print(f"obstore: is_dir={is_dir}, manifests_exist={manifests_exist}")
+#     except (ImportError, Exception) as e:
+#         print(f"obstore check failed: {e}")
+#         is_dir = os.path.isdir(src_path)
+#         manifests_exist = os.path.exists(os.path.join(src_path, "manifests"))
+#         print(f"os.path: is_dir={is_dir}, manifests_exist={manifests_exist}")
+
+
+#     if is_dir and manifests_exist:
+#         return opener_icechunk(
+#             src_path,
+#             group=group,
+#             decode_times=decode_times,
+#             authorize_virtual_chunk_access=settings[
+#                 "authorized_chunk_access"
+#             ],  # TODO this needs to be moved further up the stack so it can be passed in from the API call or some other config. For now we hardcode it here for testing purposes.
+#         )
+#     else:
+#         return xarray_open_dataset(
+#             src_path, group=group, decode_times=decode_times, **kwargs
+#         )
 
 
 @attr.s
