@@ -1,5 +1,6 @@
 """Auto-parametrized fixture that runs both cache configurations."""
 
+import json
 import sys
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +23,13 @@ def app(request, monkeypatch):
     monkeypatch.setenv("TEST_ENVIRONMENT", "1")
     monkeypatch.setenv(
         "TITILER_MULTIDIM_ENABLE_CACHE", "TRUE" if enable_cache else "FALSE"
+    )
+    # virtual container auth for icechunk tests
+    monkeypatch.setenv(
+        "TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS",
+        json.dumps(
+            {"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": True}}
+        ),
     )
 
     # Clear module cache to ensure fresh import

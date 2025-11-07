@@ -90,7 +90,7 @@ if api_settings.debug:
     app.add_middleware(
         ServerTimingMiddleware,
         calls_to_track={
-            "1-xarray-open_dataset": (reader.xarray_open_dataset,),
+            "1-xarray-open_dataset": (reader.guess_opener,),
             "2-rioxarray-reproject": (rioxarray.raster_array.RasterArray.reproject,),
         },
     )

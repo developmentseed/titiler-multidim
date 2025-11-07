@@ -11,7 +11,7 @@ import xarray as xr
 
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
-from titiler.xarray.io import Reader, get_variable
+from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 try:
     import icechunk
@@ -40,13 +40,6 @@ except ImportError:  # pragma: nocover
 
 api_settings = ApiSettings()
 cache_client = get_redis()
-
-settings = {
-    "authorized_chunk_access": {
-        "s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": True},
-        "s3://podaac-ops-cumulus-protected/MUR-JPL-L4-GLOB-v4.1/": {"from_env": True},
-    },
-}
 
 
 def opener_icechunk(
@@ -164,10 +157,37 @@ def guess_opener(
     src_path: str,
     group: Optional[Any] = None,
     decode_times: bool = True,
+    authorize_virtual_chunk_access: Optional[Dict[str, Dict[str, Any]]] = None,
     **kwargs: Any,
 ) -> xr.Dataset:
-    """Guess the storage backend and return an xarray Dataset"""
-    pass
+    """Guess the storage backend and return an xarray Dataset.
+
+    Args:
+        src_path: Path to the dataset
+        group: Optional group/subgroup to open
+        decode_times: Whether to decode time coordinates
+        authorize_virtual_chunk_access: Authorization config for icechunk virtual chunks
+        **kwargs: Additional arguments to pass to the opener
+
+    Returns:
+        xarray.Dataset
+    """
+
+    # Identify the storage backend
+    storage_format = identify_storage_backend(src_path)
+
+    if storage_format == "icechunk":
+        return opener_icechunk(
+            src_path,
+            group=group,
+            decode_times=decode_times,
+            authorize_virtual_chunk_access=authorize_virtual_chunk_access,
+        )
+    else:
+        # For zarr, h5netcdf, or other formats, use the standard xarray opener
+        return xarray_open_dataset(
+            src_path, group=group, decode_times=decode_times, **kwargs
+        )
 
 
 #     """Guess the appropriate opener based on the file extension."""
@@ -223,6 +243,12 @@ class XarrayReader(Reader):
                 print(f"Found dataset in Cache {cache_key}")
                 ds = pickle.loads(data_bytes)
 
+        # If opener_options doesn't have authorize_virtual_chunk_access, use settings
+        if "authorize_virtual_chunk_access" not in self.opener_options:
+            self.opener_options["authorize_virtual_chunk_access"] = (
+                api_settings.authorized_chunk_access
+            )
+
         self.ds = ds or self.opener(
             self.src_path,
             group=self.group,
@@ -250,12 +276,21 @@ class XarrayReader(Reader):
         src_path: str,
         group: Optional[Any] = None,
         decode_times: bool = True,
+        opener_options: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """List available variable in a dataset."""
         # todo: why is this not a method of the reader class? Seems like a smell that I have to define the opener here again....
+        opener_options = opener_options or {}
+        # If opener_options doesn't have authorize_virtual_chunk_access, use settings
+        if "authorize_virtual_chunk_access" not in opener_options:
+            opener_options["authorize_virtual_chunk_access"] = (
+                api_settings.authorized_chunk_access
+            )
+
         with guess_opener(
             src_path,
             group=group,
             decode_times=decode_times,
+            **opener_options,
         ) as ds:
             return list(ds.data_vars)  # type: ignore
