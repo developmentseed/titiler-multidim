@@ -79,11 +79,17 @@ def opener_icechunk(
     # container_credentials = icechunk.containers_credentials(
     #     {k: icechunk.s3_credentials(from_env=True) for k in vchunk_containers}
     # )
-    vchunk_creds = icechunk.containers_credentials(
-        {
-            prefix: icechunk.s3_credentials(**auth_kwargs)
-            for prefix, auth_kwargs in authorize_virtual_chunk_access.items()
-        }
+    # Only create credentials object if there are credentials to authorize
+    # Empty credentials dict causes PyString conversion errors in icechunk
+    vchunk_creds = (
+        icechunk.containers_credentials(
+            {
+                prefix: icechunk.s3_credentials(**auth_kwargs)
+                for prefix, auth_kwargs in authorize_virtual_chunk_access.items()
+            }
+        )
+        if authorize_virtual_chunk_access
+        else None
     )
 
     repo = icechunk.Repository.open(
