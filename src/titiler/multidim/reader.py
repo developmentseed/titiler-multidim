@@ -129,11 +129,9 @@ def identify_storage_backend(src_path: str) -> str:
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
-        print(os.environ.get("AWS_ENDPOINT_URL"))
         store = obstore.store.S3Store(
             bucket=parsed.netloc,
             prefix=parsed.path.lstrip("/"),
-            endpoint_url=os.environ.get("AWS_ENDPOINT_URL", None),
         )
     else:
         raise NotImplementedError(
