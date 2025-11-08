@@ -57,7 +57,7 @@ def opener_icechunk(
 
     authorize_virtual_chunk_access = authorize_virtual_chunk_access or {}
 
-    print("DEBUG:SIMPLIFIED icechunk access without auth testing")
+    print(f"DEBUG: authorize_virtual_chunk_access = {authorize_virtual_chunk_access}")
     if protocol == "file":
         storage = icechunk.local_filesystem_storage(src_path)
     elif protocol == "s3":
