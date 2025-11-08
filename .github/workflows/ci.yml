@@ -49,7 +49,7 @@ jobs:
       - name: run pre-commit
         if: ${{ matrix.python-version == env.LATEST_PY_VERSION }}
         run: |
-          uv run pre-commit run --all-files
+          uv run pre-commit run --all-files --verbose
 
       - name: Run tests
         run: uv run pytest -n auto
