@@ -56,7 +56,7 @@ jobs:
           role-session-name: test-deploy
           aws-region: us-west-2
 
-      - name: Run titiler-cmr deployment
+      - name: Run titiler-multidim deployment
         uses: "./.github/actions/cdk-deploy"
         with:
           dir: "./infrastructure/aws"
