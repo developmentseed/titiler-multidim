@@ -2976,8 +2976,8 @@ wheels = [
 
 [[package]]
 name = "titiler-core"
-version = "0.24.2"
-source = { git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=main#899f104ddd40f3e8a1a36da487d3825e04da68bd" }
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "geojson-pydantic" },
@@ -2989,6 +2989,10 @@ dependencies = [
     { name = "rio-tiler" },
     { name = "simplejson" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/6d/f4a00eff755081466eba4dfe406bdca084e9bb6c62616f67e77146edae05/titiler_core-0.25.0.tar.gz", hash = "sha256:a03a169e77d0c4804a0d3c7e8259d6640386f19c8ef60232dfb07069ae10aecb", size = 69584, upload-time = "2025-11-07T16:14:23.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/9e/fcc8da9e7879facb2b53c33c741422523d37d0fcf090c5851fb455f26c43/titiler_core-0.25.0-py3-none-any.whl", hash = "sha256:134179c2a5599cd583edc7295e549422fc3ea16e3d84b82249c75f99e95b3849", size = 88057, upload-time = "2025-11-07T16:14:22.464Z" },
 ]
 
 [[package]]
@@ -3076,8 +3080,8 @@ requires-dist = [
     { name = "requests" },
     { name = "rioxarray" },
     { name = "s3fs" },
-    { name = "titiler-core", git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fcore&branch=main" },
-    { name = "titiler-xarray", git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=main" },
+    { name = "titiler-core", specifier = ">=0.25.0,<0.26" },
+    { name = "titiler-xarray", specifier = ">=0.25.0,<0.26" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "xarray", specifier = ">=2025.10.1" },
     { name = "zarr", specifier = ">3.1.0" },
@@ -3118,13 +3122,19 @@ notebooks = [
 
 [[package]]
 name = "titiler-xarray"
-version = "0.24.2"
-source = { git = "https://github.com/developmentseed/titiler.git?subdirectory=src%2Ftitiler%2Fxarray&branch=main#899f104ddd40f3e8a1a36da487d3825e04da68bd" }
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "obstore" },
     { name = "rio-tiler" },
     { name = "rioxarray" },
     { name = "titiler-core" },
     { name = "xarray" },
+    { name = "zarr" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/10/1a/c307ef40902e9ec44058425654e6883b44fc6ed60da7480568489d84cec5/titiler_xarray-0.25.0.tar.gz", hash = "sha256:75831236fc39d6bd9dd9458c3e48e014359344078016254cf1fc8ddf362e3919", size = 31334, upload-time = "2025-11-07T16:14:26.499Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/77/dd11991dcc7b6c8411bdde746c9cac8d70d27b09a5027538c6ec8b7150fe/titiler_xarray-0.25.0-py3-none-any.whl", hash = "sha256:6c9015a65440fef177803533e3eb3d9563de932b87500a05616c3daa8b21cf3f", size = 32768, upload-time = "2025-11-07T16:14:25.381Z" },
 ]
 
 [[package]]
