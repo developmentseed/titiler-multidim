@@ -31,7 +31,7 @@ jobs:
       TITILER_MULTIDIM_PYTHONWARNINGS: ignore
       TITILER_MULTIDIM_DEBUG: true
       TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
-      TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS: '{"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": true}}'
+      TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS: '{"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": true}, "s3://podaac-ops-cumulus-protected/MUR-JPL-L4-GLOB-v4.1/": {"from_env": true}}'
 
 
     steps:
