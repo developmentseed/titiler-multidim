@@ -108,3 +108,4 @@ cdk.context.json
 .DS_Store
 
 .test-deploy-env
+.vscode/settings.json

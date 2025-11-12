@@ -39,7 +39,6 @@ def app(request, monkeypatch):
     for module in modules_to_clear:
         del sys.modules[module]
 
-    # Import and return the app
     from titiler.multidim.main import app
 
     with TestClient(app) as client:

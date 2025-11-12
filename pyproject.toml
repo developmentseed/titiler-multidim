@@ -72,8 +72,6 @@ dev = [
     "yappi>=1.6.0",
     "virtualizarr",
     "obstore",
-    "minio",
-    "docker",
 ]
 deployment = [
     "aws-cdk-lib~=2.177.0",
@@ -127,7 +125,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/test_app.py" = ["D1"]
-"tests/test_reader.py" = ["D1"]
 "tests/fixtures/generate_test_zarr.py" = ["D1"]
 "tests/fixtures/generate_test_reference.py" = ["D1"]
 

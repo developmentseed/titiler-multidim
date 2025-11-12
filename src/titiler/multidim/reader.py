@@ -57,7 +57,6 @@ def opener_icechunk(
 
     authorize_virtual_chunk_access = authorize_virtual_chunk_access or {}
 
-    print(f"DEBUG: authorize_virtual_chunk_access = {authorize_virtual_chunk_access}")
     if protocol == "file":
         storage = icechunk.local_filesystem_storage(src_path)
     elif protocol == "s3":
@@ -72,7 +71,8 @@ def opener_icechunk(
         raise NotImplementedError(
             f"icechunk storage for protocol {protocol} is not implemented"
         )
-    # TODO: I think it would be more elegant to get the virtual chunk containers and compare against authorized containers from settings but that might be slowing things down. Leaving this for later.
+    # TODO: I think it would be more elegant to get the virtual chunk containers and
+    # compare against authorized containers from settings but that might be slowing things down. Leaving this for later.
 
     vchunk_creds = (
         icechunk.containers_credentials(
@@ -88,7 +88,6 @@ def opener_icechunk(
     repo = icechunk.Repository.open(
         storage=storage, authorize_virtual_chunk_access=vchunk_creds
     )
-    print("DEBUG: opened icechunk repo")
     session = repo.readonly_session("main")
     store = session.store
     return xr.open_dataset(
@@ -101,8 +100,8 @@ def opener_icechunk(
     )
 
 
-# this is my hacky way of using obstore here, might want to check if there is a better way.
-def _is_dir(store, path: str = "") -> bool:  # TODO: type this properly.
+# TODO Is there a better way to check if a url points to a file or a prefix?
+def _is_dir(store, path: str = "") -> bool:
     """Return True if path is a prefix containing any objects (directory-like)."""
     # sanitize path and slashes
     path = path.rstrip("/") + "/"
@@ -185,42 +184,6 @@ def guess_opener(
         return xarray_open_dataset(
             src_path, group=group, decode_times=decode_times, **kwargs
         )
-
-
-#     """Guess the appropriate opener based on the file extension."""
-#     # for now simply try the icechunk opener and if it fails, fall back to xarray open_dataset.
-#     # In the future we may want to be more specific about which opener to use either based on a config or some other heuristic
-
-#             s3_endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
-#             if s3_endpoint_url:
-#                 # Check if the endpoint URL starts with 'http://' to determine if SSL should be disabled.
-#                 # This is necessary for local S3-compatible services like Minio that might not use HTTPS.
-#                 disable_ssl = s3_endpoint_url.startswith("http://")
-#                 store = obstore.Store.from_url(src_path, endpoint_url=s3_endpoint_url, disable_ssl=disable_ssl)
-#             else:
-#                 store = obstore.Store.from_url(src_path)        is_dir = store.is_dir("")
-#         manifests_exist = store.is_dir("manifests")
-#         print(f"obstore: is_dir={is_dir}, manifests_exist={manifests_exist}")
-#     except (ImportError, Exception) as e:
-#         print(f"obstore check failed: {e}")
-#         is_dir = os.path.isdir(src_path)
-#         manifests_exist = os.path.exists(os.path.join(src_path, "manifests"))
-#         print(f"os.path: is_dir={is_dir}, manifests_exist={manifests_exist}")
-
-
-#     if is_dir and manifests_exist:
-#         return opener_icechunk(
-#             src_path,
-#             group=group,
-#             decode_times=decode_times,
-#             authorize_virtual_chunk_access=settings[
-#                 "authorized_chunk_access"
-#             ],  # TODO this needs to be moved further up the stack so it can be passed in from the API call or some other config. For now we hardcode it here for testing purposes.
-#         )
-#     else:
-#         return xarray_open_dataset(
-#             src_path, group=group, decode_times=decode_times, **kwargs
-#         )
 
 
 @attr.s

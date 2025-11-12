@@ -99,7 +99,6 @@ store_params["pyramid_store"] = {
 
 def get_variables_test(app, ds_params):
     response = app.get("/variables", params=ds_params["params"])
-    print(response)
     assert response.status_code == 200
     # TODO: Do we care about the order?
     assert set(response.json()) == set(ds_params["variables"])
