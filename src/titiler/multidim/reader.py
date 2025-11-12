@@ -72,15 +72,8 @@ def opener_icechunk(
         raise NotImplementedError(
             f"icechunk storage for protocol {protocol} is not implemented"
         )
-    # # I think it would be more elegant to get the virtual chunk containers and compare against authorized
-    # # containers from settings but that might be slow?
-    # config = icechunk.Repository.fetch_config(storage=storage)
-    # vchunk_containers = config.virtual_chunk_containers.keys()
-    # container_credentials = icechunk.containers_credentials(
-    #     {k: icechunk.s3_credentials(from_env=True) for k in vchunk_containers}
-    # )
-    # Only create credentials object if there are credentials to authorize
-    # Empty credentials dict causes PyString conversion errors in icechunk
+    # TODO: I think it would be more elegant to get the virtual chunk containers and compare against authorized containers from settings but that might be slowing things down. Leaving this for later.
+
     vchunk_creds = (
         icechunk.containers_credentials(
             {
