@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import attr
 import xarray as xr
+from pydantic_settings import BaseSettings
 
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
@@ -49,9 +50,10 @@ def opener_icechunk(
     authorize_virtual_chunk_access: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
-    assert icechunk is not None, "'icechunk' must be installed to read icechunk dataset"
+    if icechunk is None:
+        raise ImportError("'icechunk' must be installed to read icechunk repositories")
 
-    # TODO: This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
+    # TODO: For future opener development. This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
 
@@ -186,6 +188,14 @@ def guess_opener(
         )
 
 
+def _inject_settings(
+    options: Dict[str, Any], settings: BaseSettings, field: str
+) -> Dict[str, Any]:
+    if field not in options:
+        options[field] = api_settings.authorized_chunk_access
+    return options
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with redis cache"""
@@ -203,11 +213,9 @@ class XarrayReader(Reader):
                 print(f"Found dataset in Cache {cache_key}")
                 ds = pickle.loads(data_bytes)
 
-        # If opener_options doesn't have authorize_virtual_chunk_access, use settings
-        if "authorize_virtual_chunk_access" not in self.opener_options:
-            self.opener_options["authorize_virtual_chunk_access"] = (
-                api_settings.authorized_chunk_access
-            )
+        self.opener_options = _inject_settings(
+            self.opener_options, api_settings, "authorize_virtual_chunk_access"
+        )
 
         self.ds = ds or self.opener(
             self.src_path,
@@ -239,13 +247,10 @@ class XarrayReader(Reader):
         opener_options: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """List available variable in a dataset."""
-        # todo: why is this not a method of the reader class? Seems like a smell that I have to define the opener here again....
         opener_options = opener_options or {}
-        # If opener_options doesn't have authorize_virtual_chunk_access, use settings
-        if "authorize_virtual_chunk_access" not in opener_options:
-            opener_options["authorize_virtual_chunk_access"] = (
-                api_settings.authorized_chunk_access
-            )
+        opener_options = _inject_settings(
+            opener_options, api_settings, "authorize_virtual_chunk_access"
+        )
 
         with guess_opener(
             src_path,
