@@ -1,4 +1,4 @@
-"""Create zarr fixture."""
+"""Create zarr fixtures for v2 and v3."""
 
 import numpy as np
 import xarray as xr
@@ -8,31 +8,32 @@ res = 5
 time_dim = 10
 lat_dim = 36
 lon_dim = 72
-chunk_size = (10, 10, 10)
+chunk_size = {"time": 10, "lat": 10, "lon": 10}
 
 # Create coordinates
 time = np.arange(time_dim)
-lat = np.linspace(-90 + res / 2, 90 - res / 2, lat_dim)
-lon = np.linspace(-180 + res / 2, 180 - res / 2, lon_dim)
+lat = np.linspace(-90.0 + res / 2, 90.0 - res / 2, lat_dim)
+lon = np.linspace(-180.0 + res / 2, 180.0 - res / 2, lon_dim)
 
+dtype = np.float64
 # Initialize variables with random data
 CDD0 = xr.DataArray(
-    np.random.rand(time_dim, lat_dim, lon_dim).astype(np.uint8),
+    np.random.rand(time_dim, lat_dim, lon_dim).astype(dtype),
     dims=("time", "lat", "lon"),
     name="CDD0",
 )
 DISPH = xr.DataArray(
-    np.random.rand(time_dim, lat_dim, lon_dim).astype(np.uint8),
+    np.random.rand(time_dim, lat_dim, lon_dim).astype(dtype),
     dims=("time", "lat", "lon"),
     name="DISPH",
 )
 FROST_DAYS = xr.DataArray(
-    np.random.rand(time_dim, lat_dim, lon_dim).astype(np.uint8),
+    np.random.rand(time_dim, lat_dim, lon_dim).astype(dtype),
     dims=("time", "lat", "lon"),
     name="FROST_DAYS",
 )
 GWETPROF = xr.DataArray(
-    np.random.rand(time_dim, lat_dim, lon_dim).astype(np.uint8),
+    np.random.rand(time_dim, lat_dim, lon_dim).astype(dtype),
     dims=("time", "lat", "lon"),
     name="GWETPROF",
 )
@@ -49,4 +50,17 @@ ds = xr.Dataset(
 )
 
 # Save dataset to a local Zarr store
-ds.to_zarr("tests/fixtures/test_zarr_store.zarr", mode="w")
+ds.to_zarr(
+    "tests/fixtures/zarr_store_v3.zarr",
+    mode="w",
+    zarr_format=3,
+    consolidated=False,
+)
+
+# Save dataset to a local Zarr store
+ds.to_zarr(
+    "tests/fixtures/zarr_store_v2.zarr",
+    mode="w",
+    zarr_format=2,
+    consolidated=True,
+)

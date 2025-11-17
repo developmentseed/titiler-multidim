@@ -1,0 +1,39 @@
+{
+    "bounds": [
+        -168.9999951170962,
+        7.000000114825381,
+        -51.99999725350927,
+        71.99999511680303
+    ],
+    "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
+    "band_metadata": [
+        [
+            "b1",
+            {}
+        ]
+    ],
+    "band_descriptions": [
+        [
+            "b1",
+            "1.0"
+        ]
+    ],
+    "dtype": "float64",
+    "nodata_type": "Nodata",
+    "name": "LWdown",
+    "count": 1,
+    "width": 11700,
+    "height": 6500,
+    "dimensions": [
+        "y",
+        "x"
+    ],
+    "attrs": {
+        "units": "W m-2",
+        "standard_name": "Surface incident longwave radiation",
+        "long_name": "Longwave radiation flux downwards (surface)",
+        "cell_methods": "time: mean",
+        "vmin": 126.3478012084961,
+        "vmax": 450.3310546875
+    }
+}

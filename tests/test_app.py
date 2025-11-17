@@ -4,22 +4,67 @@ import pytest
 
 from helpers import find_string_in_stream
 
+
 DATA_DIR = "tests/fixtures"
-test_zarr_store = os.path.join(DATA_DIR, "test_zarr_store.zarr")
+test_zarr_store_v2 = os.path.join(DATA_DIR, "zarr_store_v2.zarr")
+test_zarr_store_v3 = os.path.join(DATA_DIR, "zarr_store_v3.zarr")
 test_netcdf_store = os.path.join(DATA_DIR, "testfile.nc")
 test_unconsolidated_store = os.path.join(DATA_DIR, "unconsolidated.zarr")
 test_pyramid_store = os.path.join(DATA_DIR, "pyramid.zarr")
+test_icechunk_native = os.path.join(DATA_DIR, "icechunk_native")
+test_icechunk_virtual_accessible = os.path.join(DATA_DIR, "icechunk_virtual_accessible")
 
 store_params = {}
 
-store_params["zarr_store"] = {
+store_params["zarr_store_v2"] = {
     "params": {
-        "url": test_zarr_store,
+        "url": test_zarr_store_v2,
         "variable": "CDD0",
         "decode_times": False,
         "sel": "time=0",
     },
     "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
+}
+
+store_params["zarr_store_v3"] = {
+    "params": {
+        "url": test_zarr_store_v3,
+        "variable": "CDD0",
+        "decode_times": False,
+        "sel": "time=0",
+    },
+    "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
+}
+
+store_params["icechunk_native"] = {
+    "params": {
+        "url": test_icechunk_native,
+        "variable": "CDD0",
+        "decode_times": False,
+        "sel": "time=0",
+    },
+    "variables": ["CDD0", "DISPH", "FROST_DAYS", "GWETPROF"],
+}
+
+store_params["icechunk_virtual_accessible"] = {
+    "params": {
+        "url": test_icechunk_virtual_accessible,
+        "variable": "LWdown",
+        "decode_times": False,
+        "sel": "time=1.0",
+    },
+    "variables": [
+        "LWdown",
+        "Wind_N",
+        "Tair",
+        "Rainf",
+        "Wind_E",
+        "Qair",
+        "Tair_max",
+        "Tair_min",
+        "SWdown",
+        "PSurf",
+    ],
 }
 
 store_params["netcdf_store"] = {
@@ -55,7 +100,8 @@ store_params["pyramid_store"] = {
 def get_variables_test(app, ds_params):
     response = app.get("/variables", params=ds_params["params"])
     assert response.status_code == 200
-    assert response.json() == ds_params["variables"]
+    # TODO: Do we care about the order?
+    assert set(response.json()) == set(ds_params["variables"])
     assert response.headers["server-timing"]
     timings = response.headers["server-timing"].split(",")
     assert len(timings) == 2
@@ -149,10 +195,13 @@ def test_histogram(store_params, app):
     return histogram_test(app, store_params)
 
 
-def test_histogram_error(app):
+# TODO: Maybe this is overkill to parametrize?
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_histogram_error(store_params, app):
+    store_path = store_params["params"]["url"]
     response = app.get(
         "/histogram",
-        params={"url": test_zarr_store},
+        params={"url": store_path},
     )
     assert response.status_code == 422
     assert response.json() == {
@@ -174,9 +223,12 @@ def test_map_without_params(app):
     assert find_string_in_stream(response, "Step 1: Enter the URL of your Zarr store")
 
 
-def test_map_with_params(app):
+@pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
+def test_map_with_params(store_params, app):
+    store_path = store_params["params"]["url"]
+    variable = store_params["variables"][0]
     response = app.get(
-        "/WebMercatorQuad/map", params={"url": test_zarr_store, "variable": "CDD0"}
+        "/WebMercatorQuad/map", params={"url": store_path, "variable": variable}
     )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"

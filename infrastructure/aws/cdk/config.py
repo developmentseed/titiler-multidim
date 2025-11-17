@@ -96,6 +96,20 @@ class AppSettings(BaseSettings):
         description="Optional root path for all api endpoints",
     )
 
+    # Authorization config for icechunk virtual chunks
+    # This will be passed through to the Lambda as an environment variable
+    authorized_chunk_access: Optional[str] = Field(
+        None,
+        description="JSON string for authorizing virtual chunk access in icechunk datasets",
+    )
+
+    def model_post_init(self, __context):
+        """Add authorized_chunk_access to additional_env if set."""
+        if self.authorized_chunk_access:
+            self.additional_env["TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS"] = (
+                self.authorized_chunk_access
+            )
+
     class Config:
         """model config"""
 

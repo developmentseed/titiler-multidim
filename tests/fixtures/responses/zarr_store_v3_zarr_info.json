@@ -1,0 +1,14 @@
+{
+    "bounds": [-180.0, -90.0, 180.0, 90.0],
+    "band_metadata": [["b1", {}]],
+    "band_descriptions": [["b1", "0"]],
+    "dtype": "float64",
+    "nodata_type": "Nodata",
+    "height": 36,
+    "count": 1,
+    "width": 72,
+    "attrs": {},
+    "crs": "http://www.opengis.net/def/crs/EPSG/0/4326",
+    "dimensions": ["y", "x"],
+    "name": "CDD0"
+}
