@@ -4,6 +4,10 @@
 
 * nothing
 
+# 0.7.0
+
+* Add support for icechunk datasets by @jbusecke ([#103](https://github.com/developmentseed/titiler-xarray/pull/103)) 
+    
 # 0.6.0
 
 * Convert Lambda to a containerized function
