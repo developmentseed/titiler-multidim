@@ -2,7 +2,7 @@
 
 ## unreleased
 
-* nothing
+* fix: actually use `sel_method` when loading the variable by @hrodmn ([#107](https://github.com/developmentseed/titiler-multidim/pull/107))
 
 # 0.7.0
 

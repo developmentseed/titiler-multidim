@@ -1,7 +1,8 @@
 """Create NetCDF fixture."""
 
 import numpy as np
-from netCDF4 import Dataset
+from netCDF4 import Dataset, date2num
+from datetime import datetime, timedelta
 
 # File name
 filename = "testfile.nc"
@@ -35,7 +36,16 @@ data = rootgrp.createVariable(
 )
 
 # Fill variables with data
-times[:] = np.arange(5)
+# Create actual datetime values starting from 2020-01-01 with daily intervals
+start_date = datetime(2020, 1, 1)
+time_values = [start_date + timedelta(days=i) for i in range(5)]
+units = "days since 1970-01-01 00:00:00"
+calendar = "gregorian"
+times[:] = date2num(time_values, units=units, calendar=calendar)
+times.units = units
+times.calendar = calendar
+times.standard_name = "time"
+
 lats[:] = np.linspace(lat_min + res / 2, lat_max - res / 2, lat_n)
 lons[:] = np.linspace(lon_min + res / 2, lon_max - res / 2, lon_n)
 data[:, :, :] = np.random.randint(-128, 127, size=(5, lat_n, lon_n), dtype=np.int8)

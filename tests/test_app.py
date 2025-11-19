@@ -1,9 +1,8 @@
 import json
 import os
+
 import pytest
-
 from helpers import find_string_in_stream
-
 
 DATA_DIR = "tests/fixtures"
 test_zarr_store_v2 = os.path.join(DATA_DIR, "zarr_store_v2.zarr")
@@ -71,8 +70,8 @@ store_params["netcdf_store"] = {
     "params": {
         "url": test_netcdf_store,
         "variable": "data",
-        "decode_times": False,
-        "sel": "time=0",
+        "decode_times": True,
+        "sel": "time=2020-01-01",
     },
     "variables": ["data"],
 }
@@ -233,3 +232,10 @@ def test_map_with_params(store_params, app):
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, '<div id="map"></div>')
+
+
+def test_sel_nearest_netcdf(app):
+    params = store_params["netcdf_store"]["params"].copy()
+    params.update({"sel": "time=2020-01-06", "sel_method": "nearest"})
+    response = app.get("/info", params=params)
+    assert response.status_code == 200

@@ -153,3 +153,4 @@ excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
 [tool.pytest.ini_options]
 addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"
 pythonpath = ["src", "tests"]
+norecursedirs = ["infrastructure"]

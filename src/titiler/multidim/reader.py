@@ -1,18 +1,17 @@
 """XarrayReader"""
 
-import pickle
 import os
-from typing import Any, List, Optional, Dict
+import pickle
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
-
 
 import attr
 import xarray as xr
 from pydantic_settings import BaseSettings
+from titiler.xarray.io import Reader, xarray_open_dataset
 
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
-from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 try:
     import icechunk
@@ -231,11 +230,6 @@ class XarrayReader(Reader):
             print(f"Adding dataset in Cache: {cache_key}")
             cache_client.set(cache_key, data_bytes, ex=300)
 
-        self.input = get_variable(
-            self.ds,
-            self.variable,
-            sel=self.sel,
-        )
         super().__attrs_post_init__()
 
     @classmethod
