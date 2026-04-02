@@ -52,7 +52,7 @@ jobs:
           ref: ${{ steps.set_branch.outputs.branch }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@5fd3084fc36e372ff1fff382a39b10d03659f355 # v2
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           role-session-name: test-deploy
