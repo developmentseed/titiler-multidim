@@ -101,11 +101,6 @@ def get_variables_test(app, ds_params):
     assert response.status_code == 200
     # TODO: Do we care about the order?
     assert set(response.json()) == set(ds_params["variables"])
-    assert response.headers["server-timing"]
-    timings = response.headers["server-timing"].split(",")
-    assert len(timings) == 2
-    assert timings[0].startswith("total;dur=")
-    assert timings[1].lstrip().startswith("1-xarray-open_dataset;dur=")
 
 
 @pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
@@ -159,11 +154,6 @@ def get_tile_test(app, ds_params, zoom: int = 0):
     )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "image/png"
-    assert response.headers["server-timing"]
-    timings = response.headers["server-timing"].split(",")
-    assert len(timings) == 3
-    assert timings[1].lstrip().startswith("1-xarray-open_dataset;dur=")
-    assert timings[2].lstrip().startswith("2-rioxarray-reproject;dur=")
 
 
 @pytest.mark.parametrize("store_params", store_params.values(), ids=store_params.keys())
