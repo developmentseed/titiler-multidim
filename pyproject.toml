@@ -25,13 +25,15 @@ dynamic = ["version"]
 dependencies = [
     "titiler-core>=0.25.0,<0.26",
     "titiler-xarray>=0.25.0,<0.26",
-    "aiohttp",
     "aiobotocore>=2.24.0",
+    "aiohttp",
     "boto3>=1.39.0",
     "cftime",
     "fastapi",
     "fsspec",
     "h5netcdf",
+    "h5py>=3.16.0",
+    "icechunk>=2.0.4",
     "numpy",
     "pydantic-settings~=2.14",
     "pydantic>=2.13.3,<3.0",
@@ -41,7 +43,6 @@ dependencies = [
     "s3fs",
     "xarray>=2025.10.1",
     "zarr>=3.2.0",
-    "icechunk>=2.0.4",
 ]
 
 [project.optional-dependencies]
