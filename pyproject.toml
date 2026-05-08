@@ -17,10 +17,8 @@ classifiers = [
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dynamic = ["version"]
@@ -63,13 +61,13 @@ dev = [
     "ipykernel>=6.30.1",
     "ipython>=8.12.3",
     "netcdf4>=1.7.2",
-    "pre-commit>=3.5.0",
+    "pre-commit>=4.6.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
-    "pytest>=8.3.2",
+    "pytest>=9.0.3",
     "pytest-xdist",
+    "ruff>=0.15.12",
     "uvicorn>=0.34.0",
-    "yappi>=1.6.0",
     "virtualizarr",
     "obstore",
 ]
@@ -151,6 +149,7 @@ includes = ["src/titiler/multidim/"]
 excludes = ["tests/", "**/.mypy_cache", "**/.DS_Store"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 addopts = "--cov=titiler.multidim --cov-report term-missing -s -vv"
 pythonpath = ["src", "tests"]
 norecursedirs = ["infrastructure"]

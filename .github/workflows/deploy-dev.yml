@@ -1,4 +1,4 @@
-name: CDK Deploy Dev Workflow 🚀
+name: CDK Deploy Dev Workflow
 
 permissions:
   id-token: write
@@ -16,12 +16,12 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to dev 🚀
+    name: Deploy to dev
     runs-on: ubuntu-latest
     environment: dev
     if: >
       github.event_name != 'pull_request' ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-dev'))    
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-dev'))
     env:
       UV_PYTHON: 3.12
       CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
@@ -33,23 +33,28 @@ jobs:
       TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
       TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS: '{"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": true}, "s3://podaac-ops-cumulus-protected/MUR-JPL-L4-GLOB-v4.1/": {"from_env": true}, "s3://nasa-waterinsight/RASI/": {"anonymous": true}}'
 
-
     steps:
       - name: Determine branch to deploy
         id: set_branch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUTS_BRANCH: ${{ github.event.inputs.branch }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            echo "branch=$INPUTS_BRANCH" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" == "pull_request" ]; then
+            echo "branch=$PR_HEAD_REF" >> "$GITHUB_OUTPUT"
           else
-            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "branch=$REF_NAME" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.set_branch.outputs.branch }}
+          persist-credentials: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
@@ -59,7 +64,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Run titiler-multidim deployment
-        uses: "./.github/actions/cdk-deploy"
+        uses: ./.github/actions/cdk-deploy
         with:
           dir: "./infrastructure/aws"
           env_aws_secret_name: ""
