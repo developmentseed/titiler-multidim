@@ -68,7 +68,6 @@ dev = [
     "pytest-xdist",
     "ruff>=0.15.12",
     "uvicorn>=0.34.0",
-    "yappi>=1.6.0",
     "virtualizarr",
     "obstore",
 ]
