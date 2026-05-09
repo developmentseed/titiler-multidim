@@ -14,8 +14,7 @@ from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
-from aws_cdk.aws_ecr_assets import Platform
-from config import AppSettings, StackSettings
+from titiler.multidim.settings import AppSettings, StackSettings
 from constructs import Construct
 
 stack_settings = StackSettings()
@@ -121,35 +120,52 @@ class LambdaStack(Stack):
             role_arn=app_settings.reader_role_arn,
         )
 
-        lambda_function = aws_lambda.DockerImageFunction(
+        lambda_env = {
+            **DEFAULT_ENV,
+            **environment,
+            "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
+            "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+        }
+
+        if app_settings.telemetry_enabled:
+            lambda_env["TITILER_MULTIDIM_TELEMETRY_ENABLED"] = "TRUE"
+            lambda_env["OTEL_SERVICE_NAME"] = stack_settings.titiler_multidim_stack_name
+
+        lambda_function = aws_lambda.Function(
             self,
             f"{id}-lambda",
-            code=aws_lambda.DockerImageCode.from_image_asset(
-                directory=os.path.abspath(context_dir),
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            handler="handler.lambda_handler",
+            code=aws_lambda.Code.from_docker_build(
+                path=os.path.abspath(context_dir),
                 file="infrastructure/aws/lambda/Dockerfile",
-                platform=Platform.LINUX_AMD64,
+                platform="linux/amd64",
             ),
             memory_size=memory,
             reserved_concurrent_executions=concurrent,
             timeout=Duration.seconds(timeout),
-            environment={
-                **DEFAULT_ENV,
-                **environment,
-                "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
-                "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
-                "OTEL_METRICS_EXPORTER": "none",  # Disable metrics - only using traces
-                "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS": "aws-lambda,requests,urllib3,aiohttp-client",  # Disable aws-lambda auto-instrumentation (handled by otel_wrapper.py)
-                "OTEL_PROPAGATORS": "tracecontext,baggage,xray",
-                "OPENTELEMETRY_COLLECTOR_CONFIG_URI": "/opt/collector-config/config.yaml",
-                # AWS_LAMBDA_LOG_FORMAT not set - using custom JSON formatter in handler.py
-                "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",  # Enable OTEL wrapper to avoid circular import
-            },
+            environment=lambda_env,
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
-            tracing=aws_lambda.Tracing.ACTIVE,
+            tracing=(
+                aws_lambda.Tracing.ACTIVE
+                if app_settings.telemetry_enabled
+                else aws_lambda.Tracing.DISABLED
+            ),
+            snap_start=aws_lambda.SnapStartConf.ON_PUBLISHED_VERSIONS,
+        )
+
+        # SnapStart only activates on published versions. Create a version and
+        # alias so that API Gateway integrates with a versioned function rather
+        # than $LATEST, which would bypass the snapshot entirely.
+        live_alias = aws_lambda.Alias(
+            self,
+            f"{id}-live",
+            alias_name="live",
+            version=lambda_function.current_version,
         )
 
         for perm in permissions:
@@ -160,7 +176,7 @@ class LambdaStack(Stack):
             f"{id}-endpoint",
             default_integration=HttpLambdaIntegration(
                 f"{id}-integration",
-                lambda_function,
+                live_alias,
                 parameter_mapping=apigw.ParameterMapping().overwrite_header(
                     "host",
                     apigw.MappingValue(stack_settings.veda_custom_host),
@@ -213,10 +229,13 @@ if app_settings.buckets:
         )
     )
 
-# Add X-Ray permissions for tracing
+# X-Ray permissions: PutTraceSegments/PutTelemetryRecords for X-Ray SDK path;
+# PutSpans/PutSpansForIndexing for the native OTLP ingestion endpoint.
 perms.append(
     iam.PolicyStatement(
         actions=[
+            "xray:PutSpans",
+            "xray:PutSpansForIndexing",
             "xray:PutTraceSegments",
             "xray:PutTelemetryRecords",
         ],

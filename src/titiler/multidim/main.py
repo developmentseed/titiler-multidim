@@ -35,9 +35,7 @@ app = FastAPI(
 
 ###############################################################################
 # Tiles endpoints
-xarray_factory = XarrayTilerFactory(
-    enable_telemetry=True  # Always enable telemetry when using OTEL
-)
+xarray_factory = XarrayTilerFactory(enable_telemetry=api_settings.telemetry_enabled)
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
 
 ###############################################################################
