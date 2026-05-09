@@ -49,6 +49,7 @@ uv run pytest tests/test_app.py::test_get_info
 
 * **Production deployments** are handled in the [NASA-IMPACT/veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repository.
 * **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository.
+* **CDK synth checks** can be triggered by applying the `run-cdk-checks` label to a pull request in this repository. This check only runs when the label is added, so if new commits are pushed later the label must be removed and added again.
 
 ## New Deployments
 
