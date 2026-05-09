@@ -158,20 +158,22 @@ for d in /asset/rasterio /asset/PIL /asset/pyproj /asset/shapely; do
 done
 
 mkdir -p /asset/shared.libs
-cp -P /opt/gdal/lib64/libgdal.so* /asset/shared.libs/
-cp -P \
-    /usr/lib64/libproj.so* \
-    /usr/lib64/libgeos.so* \
-    /usr/lib64/libgeos_c.so* \
-    /usr/lib64/libsqlite3.so* \
-    /usr/lib64/libtiff.so* \
-    /usr/lib64/libjpeg.so* \
-    /usr/lib64/libwebp.so* \
-    /usr/lib64/libzstd.so* \
-    /usr/lib64/libopenjp2.so* \
-    /usr/lib64/libpng16.so* \
-    /usr/lib64/libjbig.so* \
-    /asset/shared.libs/
+# Copy exactly one file per runtime SONAME to avoid shipping duplicate .so symlink
+# chains. Lambda zip staging can dereference symlinks, which turns the symlink
+# chain into tens of megabytes of duplicated shared libraries and pushes the
+# unzipped asset over Lambda's 250 MiB limit.
+cp -L /opt/gdal/lib64/libgdal.so.38 /asset/shared.libs/libgdal.so.38
+cp -L /usr/lib64/libproj.so.25 /asset/shared.libs/libproj.so.25
+cp -L /usr/lib64/libgeos.so.3.13.0 /asset/shared.libs/libgeos.so.3.13.0
+cp -L /usr/lib64/libgeos_c.so.1 /asset/shared.libs/libgeos_c.so.1
+cp -L /usr/lib64/libsqlite3.so.0 /asset/shared.libs/libsqlite3.so.0
+cp -L /usr/lib64/libtiff.so.5 /asset/shared.libs/libtiff.so.5
+cp -L /usr/lib64/libjpeg.so.62 /asset/shared.libs/libjpeg.so.62
+cp -L /usr/lib64/libwebp.so.7 /asset/shared.libs/libwebp.so.7
+cp -L /usr/lib64/libzstd.so.1 /asset/shared.libs/libzstd.so.1
+cp -L /usr/lib64/libopenjp2.so.7 /asset/shared.libs/libopenjp2.so.7
+cp -L /usr/lib64/libpng16.so.16 /asset/shared.libs/libpng16.so.16
+cp -L /usr/lib64/libjbig.so.2.1 /asset/shared.libs/libjbig.so.2.1
 find /asset/shared.libs -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN' {}
 
 cp /usr/lib64/libexpat.so.1 /asset/
