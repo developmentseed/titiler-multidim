@@ -1472,14 +1472,14 @@ wheels = [
 
 [[package]]
 name = "mangum"
-version = "0.21.0"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/cb/d9f4d685a0b8eceac10991e15ac471d9568e4e42c2489ae9bf072828c1c2/mangum-0.21.0.tar.gz", hash = "sha256:e31ed72d67f9958fa4379f65df77729906dec6dfa00afa6ed4e06c77833000de", size = 89130, upload-time = "2026-02-01T17:17:42.816Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/e0/6ee9bfa27226252a449cba12fc57d3f1c3ce661813377ab33e29245389a4/mangum-0.19.0.tar.gz", hash = "sha256:e388e7c491b7b67970f8234e46fd4a7b21ff87785848f418de08148f71cf0bd6", size = 85792, upload-time = "2024-09-26T20:44:49.773Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/50/e3c694b8e122551e4557450219283771334dee2ed5734a8398c8b8018c50/mangum-0.21.0-py3-none-any.whl", hash = "sha256:309e48f5c629542516c5106ecf079f4ec08809ed50df882238d98fe1392820c7", size = 17146, upload-time = "2026-02-01T17:17:41.553Z" },
+    { url = "https://files.pythonhosted.org/packages/77/ec/dd1cae5f6b1b4a08c01de587b45e889036b2f8c06408621e0cb273909965/mangum-0.19.0-py3-none-any.whl", hash = "sha256:e500b35f495d5e68ac98bc97334896d6101523f2ee2c57ba6a61893b65266e59", size = 17083, upload-time = "2024-09-26T20:44:48.357Z" },
 ]
 
 [[package]]
@@ -3016,7 +3016,7 @@ requires-dist = [
     { name = "h5netcdf" },
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "icechunk", specifier = ">=2.0.4" },
-    { name = "mangum", marker = "extra == 'lambda'", specifier = "==0.21.0" },
+    { name = "mangum", marker = "extra == 'lambda'", specifier = "==0.19.0" },
     { name = "numpy" },
     { name = "pydantic", specifier = ">=2.13.3,<3.0" },
     { name = "pydantic-settings", specifier = "~=2.14" },

@@ -50,7 +50,7 @@ server = [
     "uvicorn"
 ]
 lambda = [
-    "mangum==0.21.0",
+    "mangum==0.19.0",
     "aiobotocore>=2.24.0,<2.24.2",
 ]
 
