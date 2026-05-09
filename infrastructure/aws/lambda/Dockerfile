@@ -65,12 +65,16 @@ RUN cmake \
     && cmake --install /tmp/gdal-build
 
 
-# ── Stage 2: assemble Lambda package ──────────────────────────────────────────
-FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
+# ── Stage 2: build Python deps in full AL2023 image ───────────────────────────
+FROM --platform=linux/amd64 public.ecr.aws/amazonlinux/amazonlinux:2023 AS python-builder
+
+ARG PYTHON_VERSION
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY --from=gdal-builder /opt/gdal /opt/gdal
 
 RUN dnf install -y \
+    python${PYTHON_VERSION} python${PYTHON_VERSION}-devel python${PYTHON_VERSION}-pip \
     gcc gcc-c++ gcc-gfortran \
     patchelf \
     proj proj-devel \
@@ -83,7 +87,6 @@ RUN dnf install -y \
     openjpeg2 openjpeg2-devel \
     libtiff libtiff-devel \
     libpng libpng-devel \
-    hdf5-devel \
     && dnf clean all
 
 WORKDIR /tmp
@@ -93,20 +96,21 @@ WORKDIR /tmp
 # to the project source don't bust this layer.
 COPY uv.lock .python-version pyproject.toml ./
 
-# Build pydantic, rasterio, numpy, pillow, pyproj, shapely, and h5py from source.
+# Build pydantic, rasterio, numpy, pillow, pyproj, and shapely from source.
 # GDAL_CONFIG points rasterio's build at our minimal GDAL.
 # NPY_BLAS/LAPACK_ORDER="" disables BLAS detection: numpy uses its bundled lapack_lite
 # instead of OpenBLAS, saving ~42MB at the cost of linalg performance (acceptable for Lambda).
-# Building from source for pillow, pyproj, shapely, and h5py links against system libs already
-# bundled in shared.libs, eliminating their manylinux *.libs directories.
+# h5py stays on its manylinux wheel because Amazon Linux 2023 does not ship hdf5-devel in the
+# default repos exposed to these container images.
 RUN uv export --locked --no-editable --no-dev --extra lambda \
     --no-emit-project --format requirements.txt -o requirements.txt \
     && GDAL_CONFIG=/opt/gdal/bin/gdal-config \
        NPY_BLAS_ORDER="" \
        NPY_LAPACK_ORDER="" \
        uv pip install \
+           --python /usr/bin/python${PYTHON_VERSION} \
            --compile-bytecode \
-           --no-binary pydantic,rasterio,numpy,pillow,pyproj,shapely,h5py \
+           --no-binary pydantic,rasterio,numpy,pillow,pyproj,shapely \
            --target /asset \
            -r requirements.txt
 
@@ -115,7 +119,12 @@ RUN uv export --locked --no-editable --no-dev --extra lambda \
 COPY README.md uv.lock .python-version pyproject.toml ./
 COPY src/titiler/ ./src/titiler/
 
-RUN uv pip install --no-deps --compile-bytecode --target /asset .
+RUN uv pip install \
+    --python /usr/bin/python${PYTHON_VERSION} \
+    --no-deps \
+    --compile-bytecode \
+    --target /asset \
+    .
 
 # Bundle PROJ data directory so pyproj can find CRS definitions at runtime.
 # Source-built pyproj doesn't include data; it searches pyproj/proj_dir/share/proj/
@@ -133,20 +142,20 @@ EOF
 COPY --from=lambda-base /usr/lib64/libcurl.so.4 /asset/libcurl.so.4
 
 # Assemble all native library dependencies and fix their load paths:
-# - Extension RPATHs → $ORIGIN/../shared.libs (rasterio, PIL, pyproj, shapely, h5py)
+# - Extension RPATHs → $ORIGIN/../shared.libs (rasterio, PIL, pyproj, shapely)
 # - shared.libs: libgdal + all non-Lambda-runtime deps, RPATH → $ORIGIN so
 #   libgdal finds libproj/libgeos/etc. within the directory at runtime
-# - libhdf5: required by h5py at runtime
+# - h5py keeps its bundled manylinux HDF5 libs in h5py.libs
 # - libexpat: required by libgdal at runtime
 # - libgfortran/libquadmath: Fortran runtime for numpy's bundled lapack_lite
 #   (no OpenBLAS needed — numpy uses lapack_lite instead, saving ~42MB)
 RUN <<'EOF'
 set -e
-find /asset/rasterio -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
-find /asset/PIL      -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
-find /asset/pyproj   -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
-find /asset/shapely  -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
-find /asset/h5py     -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
+for d in /asset/rasterio /asset/PIL /asset/pyproj /asset/shapely; do
+    if [ -d "$d" ]; then
+        find "$d" -name '*.so*' -not -type l | xargs -r -I{} patchelf --set-rpath '$ORIGIN/../shared.libs' {}
+    fi
+done
 
 mkdir -p /asset/shared.libs
 cp -P /opt/gdal/lib64/libgdal.so* /asset/shared.libs/
@@ -162,7 +171,6 @@ cp -P \
     /usr/lib64/libopenjp2.so* \
     /usr/lib64/libpng16.so* \
     /usr/lib64/libjbig.so* \
-    /usr/lib64/libhdf5.so* \
     /asset/shared.libs/
 find /asset/shared.libs -name '*.so*' -not -type l | xargs -I{} patchelf --set-rpath '$ORIGIN' {}
 
@@ -187,7 +195,11 @@ rm -rdf numpy/doc/ bin geos_license Misc boto3* botocore*
 find . -type f -name '*.so*' -exec strip --strip-unneeded {} \;
 EOF
 
+# ── Stage 3: assemble final Lambda image ──────────────────────────────────────
+FROM --platform=linux/amd64 public.ecr.aws/lambda/python:${PYTHON_VERSION}
+
 # Bundle GDAL data files (schemas, SRS definitions) needed by the GDAL drivers
+COPY --from=python-builder /asset /asset
 COPY --from=gdal-builder /opt/gdal/share/gdal /asset/gdal_data
 
 COPY infrastructure/aws/lambda/handler.py /asset/handler.py
