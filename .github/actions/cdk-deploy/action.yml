@@ -32,10 +32,6 @@ runs:
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{
           hashFiles('**/package-lock.json') }}
 
-    - name: Install AWS CDK
-      shell: bash
-      run: npm install -g aws-cdk@latest
-
     - name: Install uv
       uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       with:
@@ -46,7 +42,7 @@ runs:
       working-directory: ${{ inputs.dir }}
       run: |
         uv sync --only-group deployment
-        uv run npm install
+        uv run npm ci
 
     - name: Get relevant environment configuration from aws secrets
       if: inputs.env_aws_secret_name != ''
@@ -64,7 +60,7 @@ runs:
     - name: CDK Synth
       shell: bash
       working-directory: ${{ inputs.dir }}
-      run: uv run --only-group deployment npm run cdk -- synth
+      run: uv run npm run cdk -- synth
 
     - name: Check Asset Sizes
       shell: bash
@@ -89,4 +85,4 @@ runs:
       shell: bash
       working-directory: ${{ inputs.dir }}
       run: |
-        uv run cdk deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json
+        uv run npm run cdk -- deploy --all --require-approval never --outputs-file ${HOME}/cdk-outputs.json
