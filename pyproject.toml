@@ -73,7 +73,7 @@ dev = [
     "obstore",
 ]
 deployment = [
-    "aws-cdk-lib~=2.252.0",
+    "aws-cdk-lib==2.177.0",
     "constructs>=10.4.2",
     "pydantic-settings~=2.14",
     "python-dotenv>=1.2.2",
