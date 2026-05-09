@@ -1,7 +1,7 @@
 """Construct App."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from aws_cdk import App, CfnOutput, Duration, Stack, Tags, aws_lambda
 from aws_cdk import aws_apigatewayv2 as apigw
@@ -14,8 +14,9 @@ from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
-from titiler.multidim.settings import AppSettings, StackSettings
 from constructs import Construct
+
+from titiler.multidim.settings import AppSettings, StackSettings
 
 stack_settings = StackSettings()
 app_settings = AppSettings()
@@ -43,7 +44,6 @@ class LambdaStack(Stack):
         memory: int = 1024,
         timeout: int = 30,
         concurrent: Optional[int] = None,
-        permissions: Optional[List[iam.PolicyStatement]] = None,
         environment: Optional[Dict] = None,
         context_dir: str = "../../",
         **kwargs: Any,
@@ -51,7 +51,6 @@ class LambdaStack(Stack):
         """Define stack."""
         super().__init__(scope, id, **kwargs)
 
-        permissions = permissions or []
         environment = environment or {}
 
         if stack_settings.vpc_id:
@@ -118,6 +117,7 @@ class LambdaStack(Stack):
             self,
             "reader-role",
             role_arn=app_settings.reader_role_arn,
+            mutable=False,
         )
 
         lambda_env = {
@@ -158,6 +158,19 @@ class LambdaStack(Stack):
             snap_start=aws_lambda.SnapStartConf.ON_PUBLISHED_VERSIONS,
         )
 
+        if app_settings.telemetry_enabled:
+            lambda_function.add_to_role_policy(
+                iam.PolicyStatement(
+                    actions=[
+                        "xray:PutSpans",
+                        "xray:PutSpansForIndexing",
+                        "xray:PutTraceSegments",
+                        "xray:PutTelemetryRecords",
+                    ],
+                    resources=["*"],
+                )
+            )
+
         # SnapStart only activates on published versions. Create a version and
         # alias so that API Gateway integrates with a versioned function rather
         # than $LATEST, which would bypass the snapshot entirely.
@@ -167,9 +180,6 @@ class LambdaStack(Stack):
             alias_name="live",
             version=lambda_function.current_version,
         )
-
-        for perm in permissions:
-            lambda_function.add_to_role_policy(perm)
 
         api = apigw.HttpApi(
             self,
@@ -220,29 +230,6 @@ class LambdaStack(Stack):
 
 app = App()
 
-perms = []
-if app_settings.buckets:
-    perms.append(
-        iam.PolicyStatement(
-            actions=["s3:GetObject"],
-            resources=[f"arn:aws:s3:::{bucket}*" for bucket in app_settings.buckets],
-        )
-    )
-
-# X-Ray permissions: PutTraceSegments/PutTelemetryRecords for X-Ray SDK path;
-# PutSpans/PutSpansForIndexing for the native OTLP ingestion endpoint.
-perms.append(
-    iam.PolicyStatement(
-        actions=[
-            "xray:PutSpans",
-            "xray:PutSpansForIndexing",
-            "xray:PutTraceSegments",
-            "xray:PutTelemetryRecords",
-        ],
-        resources=["*"],
-    )
-)
-
 
 lambda_stack = LambdaStack(
     app,
@@ -250,7 +237,6 @@ lambda_stack = LambdaStack(
     memory=10240,
     timeout=app_settings.timeout,
     concurrent=app_settings.max_concurrent,
-    permissions=perms,
     environment=app_settings.additional_env,
     env=stack_settings.cdk_env(),  # deploy env settings (account, region) passed to Stack.__init__()
 )

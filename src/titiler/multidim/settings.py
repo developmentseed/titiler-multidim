@@ -81,7 +81,6 @@ class AppSettings(BaseSettings):
 
     reader_role_arn: str
     additional_env: dict = {}
-    buckets: list = []
     key: str = "*"
     timeout: int = 30
     memory: int = 3009
