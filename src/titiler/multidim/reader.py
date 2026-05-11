@@ -1,6 +1,5 @@
 """XarrayReader"""
 
-import logging
 import os
 import pickle
 from typing import Any, Dict, List, Optional
@@ -8,6 +7,8 @@ from urllib.parse import urlparse
 
 import attr
 import xarray as xr
+from boto3.session import Session
+from obstore.auth.boto3 import Boto3CredentialProvider
 from pydantic_settings import BaseSettings
 from titiler.xarray.io import Reader, xarray_open_dataset
 
@@ -41,7 +42,6 @@ except ImportError:  # pragma: nocover
 
 api_settings = ApiSettings()
 cache_client = get_redis()
-logger = logging.getLogger(__name__)
 
 
 def opener_icechunk(
@@ -124,31 +124,12 @@ def identify_storage_backend(src_path: str) -> str:
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
-        logger.info(
-            "Creating S3Store for backend detection",
-            extra={
-                "bucket": parsed.netloc,
-                "prefix": parsed.path.lstrip("/"),
-                "obstore_version": getattr(obstore, "__version__", "unknown"),
-                "aws_env_present": {
-                    "AWS_ACCESS_KEY_ID": bool(os.getenv("AWS_ACCESS_KEY_ID")),
-                    "AWS_SECRET_ACCESS_KEY": bool(os.getenv("AWS_SECRET_ACCESS_KEY")),
-                    "AWS_SESSION_TOKEN": bool(os.getenv("AWS_SESSION_TOKEN")),
-                    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": bool(
-                        os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
-                    ),
-                    "AWS_CONTAINER_CREDENTIALS_FULL_URI": bool(
-                        os.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
-                    ),
-                    "AWS_REGION": bool(os.getenv("AWS_REGION")),
-                    "AWS_DEFAULT_REGION": bool(os.getenv("AWS_DEFAULT_REGION")),
-                    "AWS_EXECUTION_ENV": bool(os.getenv("AWS_EXECUTION_ENV")),
-                },
-            },
-        )
+        session = Session()
+        credential_provider = Boto3CredentialProvider(session)
         store = obstore.store.S3Store(
             bucket=parsed.netloc,
             prefix=parsed.path.lstrip("/"),
+            credential_provider=credential_provider,
         )
     else:
         raise NotImplementedError(
