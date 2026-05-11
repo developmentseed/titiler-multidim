@@ -31,6 +31,7 @@ DEFAULT_ENV = {
     "PYTHONWARNINGS": "ignore",
     "VSI_CACHE": "TRUE",
     "VSI_CACHE_SIZE": "5000000",  # 5 MB (per file-handle)
+    "AWS_EC2_METADATA_DISABLED": "true",
 }
 
 
@@ -155,7 +156,7 @@ class LambdaStack(Stack):
                 if app_settings.telemetry_enabled
                 else aws_lambda.Tracing.DISABLED
             ),
-            # snap_start=aws_lambda.SnapStartConf.ON_PUBLISHED_VERSIONS,
+            snap_start=aws_lambda.SnapStartConf.ON_PUBLISHED_VERSIONS,
         )
 
         if app_settings.telemetry_enabled:
