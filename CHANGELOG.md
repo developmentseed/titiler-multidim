@@ -4,6 +4,13 @@
 
 * nothing
 
+## [0.7.2](https://github.com/developmentseed/titiler-multidim/compare/v0.7.1...v0.7.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* deploy Lambda as zip package ([#126](https://github.com/developmentseed/titiler-multidim/issues/126)) ([b06434f](https://github.com/developmentseed/titiler-multidim/commit/b06434f8ac3f7de0b35db91bd411d657676d2c7d))
+
 ## 0.7.1
 
 * fix: actually use `sel_method` when loading the variable by @hrodmn ([#107](https://github.com/developmentseed/titiler-multidim/pull/107))
