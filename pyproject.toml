@@ -35,6 +35,7 @@ dependencies = [
     "h5py>=3.16.0",
     "icechunk>=2.0.4",
     "numpy",
+    "obstore>=0.9.4",
     "pydantic-settings~=2.14",
     "pydantic>=2.13.3,<3.0",
     "redis",
@@ -52,6 +53,13 @@ server = [
 lambda = [
     "mangum==0.19.0",
     "aiobotocore>=2.24.0,<2.24.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+    "opentelemetry-instrumentation-fastapi>=0.61b0",
+    "opentelemetry-instrumentation-httpx>=0.61b0",
+    "opentelemetry-instrumentation-logging>=0.61b0",
+    "opentelemetry-propagator-aws-xray>=1.0.2",
+    "opentelemetry-sdk>=1.40.0",
+    "opentelemetry-sdk-extension-aws>=2.1.0",
 ]
 
 [dependency-groups]
@@ -70,11 +78,10 @@ dev = [
     "ruff>=0.15.12",
     "uvicorn>=0.46.0",
     "virtualizarr",
-    "obstore",
 ]
 deployment = [
-    "aws-cdk-lib==2.177.0",
-    "constructs>=10.4.2",
+    "aws-cdk-lib==2.253.1",
+    "constructs>=10.5.0,<11.0.0",
     "pydantic-settings~=2.14",
     "python-dotenv>=1.2.2",
 ]

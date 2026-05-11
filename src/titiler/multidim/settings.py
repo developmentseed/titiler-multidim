@@ -1,14 +1,15 @@
-"""Titiler-xarray API settings."""
+"""Titiler-multidim API and deployment settings."""
 
 import json
-from typing import Any, Dict
+from getpass import getuser
+from typing import Annotated, Any
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ApiSettings(BaseSettings):
-    """FASTAPI application settings."""
+    """FastAPI application settings."""
 
     name: str = "titiler-multidim"
     cors_origins: str = "*"
@@ -16,14 +17,14 @@ class ApiSettings(BaseSettings):
     cachecontrol: str = "public, max-age=3600"
     root_path: str = ""
     debug: bool = False
-
-    model_config = SettingsConfigDict(env_prefix="TITILER_MULTIDIM_", env_file=".env")
+    telemetry_enabled: bool = False
     cache_host: str = "127.0.0.1"
     enable_cache: bool = True
+    authorized_chunk_access: dict[str, dict[str, Any]] = {}
 
-    # Configuration for authorizing virtual chunk access in icechunk datasets
-    # Format: {"s3://bucket/prefix/": {"anonymous": true}, "s3://other/": {"from_env": true}}
-    authorized_chunk_access: Dict[str, Dict[str, Any]] = {}
+    model_config = SettingsConfigDict(
+        env_prefix="TITILER_MULTIDIM_", env_file=".env", extra="ignore"
+    )
 
     @field_validator("cors_origins")
     def parse_cors_origin(cls, v):
@@ -44,3 +45,61 @@ class ApiSettings(BaseSettings):
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in authorized_chunk_access: {e}") from e
         return v or {}
+
+
+class StackSettings(BaseSettings):
+    """CDK stack settings."""
+
+    titiler_multidim_stack_name: str = "titiler-multidim"
+    stage: str = Field(..., description="Deployment stage, e.g. dev, staging, prod")
+    owner: str = Field(default_factory=getuser)
+    vpc_id: Annotated[str | None, "VPC id; creates a new one if not provided"] = None
+    cdk_default_account: str | None = Field(
+        None, description="AWS account id required when deploying to an existing VPC"
+    )
+    cdk_default_region: str | None = Field(
+        None, description="AWS region required when deploying to an existing VPC"
+    )
+    veda_custom_host: str | None = Field(
+        None, description="Custom host URL override for API Gateway integration"
+    )
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    def cdk_env(self) -> dict:
+        """Return CDK environment dict for stack."""
+        if self.vpc_id:
+            return {
+                "account": self.cdk_default_account,
+                "region": self.cdk_default_region,
+            }
+        return {}
+
+
+class AppSettings(BaseSettings):
+    """Lambda and application deployment settings."""
+
+    reader_role_arn: str
+    additional_env: dict = {}
+    key: str = "*"
+    timeout: int = 30
+    memory: int = 3009
+    telemetry_enabled: bool = False
+    max_concurrent: int | None = None
+    alarm_email: str | None = ""
+    root_path: str = Field("", description="Optional root path for all API endpoints")
+    authorized_chunk_access: str | None = Field(
+        None,
+        description="JSON string for authorizing virtual chunk access in icechunk datasets",
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", env_prefix="TITILER_MULTIDIM_"
+    )
+
+    def model_post_init(self, __context: Any) -> None:
+        """Add authorized_chunk_access to additional_env if set."""
+        if self.authorized_chunk_access:
+            self.additional_env["TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS"] = (
+                self.authorized_chunk_access
+            )

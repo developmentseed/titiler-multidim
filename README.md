@@ -49,6 +49,7 @@ uv run pytest tests/test_app.py::test_get_info
 
 * **Production deployments** are handled in the [NASA-IMPACT/veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repository.
 * **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository.
+* **CDK synth checks** can be triggered by applying the `run-cdk-checks` label to a pull request in this repository. This check only runs when the label is added, so if new commits are pushed later the label must be removed and added again.
 
 ## New Deployments
 
@@ -63,14 +64,14 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
     # Install with the deployment dependencies
     uv sync --group deployment
 
-    # Install node dependency
-    uv run npm --prefix infrastructure/aws install
+    # Install the pinned local CDK CLI
+    uv run npm --prefix infrastructure/aws ci
 
     # Deploys the CDK toolkit stack into an AWS environment
     uv run npm --prefix infrastructure/aws run cdk -- bootstrap
 
     # or to a specific region and or using AWS profile
-    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=myprofile npm --prefix infrastructure/aws run cdk -- bootstrap
+    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=myprofile uv run npm --prefix infrastructure/aws run cdk -- bootstrap
     ```
 
 2. Update settings
@@ -93,6 +94,8 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
     ```
 
 **Important**
+
+The Python `aws-cdk-lib` dependency in `pyproject.toml` is the construct library used by `infrastructure/aws/cdk/app.py`. The npm `aws-cdk` dependency in `infrastructure/aws/package.json` provides the `cdk` CLI. Keep the Python library pinned in `pyproject.toml`, keep the CLI pinned in `package.json` and `package-lock.json`, and always invoke CDK through `npm --prefix infrastructure/aws run cdk -- ...` so synth and deploy use the same local CLI version.
 
 In AWS Lambda environment we need to have specific version of botocore, S3FS, FSPEC and other libraries.
 To make sure the application will both work locally and in AWS Lambda environment you can install the dependencies using `python -m pip install -r infrastructure/aws/requirement-lambda.txt`

@@ -1,0 +1,46 @@
+name: CDK Checks
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  cdk-checks:
+    name: CDK checks
+    if: contains(github.event.pull_request.labels.*.name, 'run-cdk-checks')
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      UV_PYTHON: 3.12
+      CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
+      CDK_DEFAULT_REGION: ${{ vars.CDK_DEFAULT_REGION }}
+      STAGE: ${{ vars.STAGE }}
+      VPC_ID: ${{ vars.VPC_ID }}
+      TITILER_MULTIDIM_PYTHONWARNINGS: ignore
+      TITILER_MULTIDIM_DEBUG: true
+      TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
+    defaults:
+      run:
+        working-directory: infrastructure/aws
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: github-actions-pr
+          aws-region: ${{ vars.CDK_DEFAULT_REGION }}
+
+      - uses: ./.github/actions/cdk-deploy
+        with:
+          dir: 'infrastructure/aws'
+          skip_deploy: 'true'

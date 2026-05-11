@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 import attr
 import xarray as xr
+from boto3.session import Session
+from obstore.auth.boto3 import Boto3CredentialProvider
 from pydantic_settings import BaseSettings
 from titiler.xarray.io import Reader, xarray_open_dataset
 
@@ -122,9 +124,12 @@ def identify_storage_backend(src_path: str) -> str:
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
+        session = Session()
+        credential_provider = Boto3CredentialProvider(session)
         store = obstore.store.S3Store(
             bucket=parsed.netloc,
             prefix=parsed.path.lstrip("/"),
+            credential_provider=credential_provider,
         )
     else:
         raise NotImplementedError(

@@ -1,7 +1,7 @@
 """Construct App."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from aws_cdk import App, CfnOutput, Duration, Stack, Tags, aws_lambda
 from aws_cdk import aws_apigatewayv2 as apigw
@@ -14,9 +14,9 @@ from aws_cdk import aws_logs as logs
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subscriptions
 from aws_cdk.aws_apigatewayv2_integrations import HttpLambdaIntegration
-from aws_cdk.aws_ecr_assets import Platform
-from config import AppSettings, StackSettings
 from constructs import Construct
+
+from titiler.multidim.settings import AppSettings, StackSettings
 
 stack_settings = StackSettings()
 app_settings = AppSettings()
@@ -31,6 +31,7 @@ DEFAULT_ENV = {
     "PYTHONWARNINGS": "ignore",
     "VSI_CACHE": "TRUE",
     "VSI_CACHE_SIZE": "5000000",  # 5 MB (per file-handle)
+    "AWS_EC2_METADATA_DISABLED": "true",
 }
 
 
@@ -44,7 +45,6 @@ class LambdaStack(Stack):
         memory: int = 1024,
         timeout: int = 30,
         concurrent: Optional[int] = None,
-        permissions: Optional[List[iam.PolicyStatement]] = None,
         environment: Optional[Dict] = None,
         context_dir: str = "../../",
         **kwargs: Any,
@@ -52,7 +52,6 @@ class LambdaStack(Stack):
         """Define stack."""
         super().__init__(scope, id, **kwargs)
 
-        permissions = permissions or []
         environment = environment or {}
 
         if stack_settings.vpc_id:
@@ -119,48 +118,76 @@ class LambdaStack(Stack):
             self,
             "reader-role",
             role_arn=app_settings.reader_role_arn,
+            mutable=False,
         )
 
-        lambda_function = aws_lambda.DockerImageFunction(
+        lambda_env = {
+            **DEFAULT_ENV,
+            **environment,
+            "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
+            "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
+        }
+
+        if app_settings.telemetry_enabled:
+            lambda_env["TITILER_MULTIDIM_TELEMETRY_ENABLED"] = "TRUE"
+            lambda_env["OTEL_SERVICE_NAME"] = stack_settings.titiler_multidim_stack_name
+
+        lambda_function = aws_lambda.Function(
             self,
             f"{id}-lambda",
-            code=aws_lambda.DockerImageCode.from_image_asset(
-                directory=os.path.abspath(context_dir),
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
+            handler="handler.lambda_handler",
+            code=aws_lambda.Code.from_docker_build(
+                path=os.path.abspath(context_dir),
                 file="infrastructure/aws/lambda/Dockerfile",
-                platform=Platform.LINUX_AMD64,
+                platform="linux/amd64",
             ),
             memory_size=memory,
             reserved_concurrent_executions=concurrent,
             timeout=Duration.seconds(timeout),
-            environment={
-                **DEFAULT_ENV,
-                **environment,
-                "TITILER_MULTIDIM_ROOT_PATH": app_settings.root_path,
-                "TITILER_MULTIDIM_CACHE_HOST": redis_cluster.attr_redis_endpoint_address,
-                "OTEL_METRICS_EXPORTER": "none",  # Disable metrics - only using traces
-                "OTEL_PYTHON_DISABLED_INSTRUMENTATIONS": "aws-lambda,requests,urllib3,aiohttp-client",  # Disable aws-lambda auto-instrumentation (handled by otel_wrapper.py)
-                "OTEL_PROPAGATORS": "tracecontext,baggage,xray",
-                "OPENTELEMETRY_COLLECTOR_CONFIG_URI": "/opt/collector-config/config.yaml",
-                # AWS_LAMBDA_LOG_FORMAT not set - using custom JSON formatter in handler.py
-                "AWS_LAMBDA_EXEC_WRAPPER": "/opt/otel-instrument",  # Enable OTEL wrapper to avoid circular import
-            },
+            environment=lambda_env,
             log_retention=logs.RetentionDays.ONE_WEEK,
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             allow_public_subnet=True,
             role=veda_reader_role,
-            tracing=aws_lambda.Tracing.ACTIVE,
+            tracing=(
+                aws_lambda.Tracing.ACTIVE
+                if app_settings.telemetry_enabled
+                else aws_lambda.Tracing.DISABLED
+            ),
+            snap_start=aws_lambda.SnapStartConf.ON_PUBLISHED_VERSIONS,
         )
 
-        for perm in permissions:
-            lambda_function.add_to_role_policy(perm)
+        if app_settings.telemetry_enabled:
+            lambda_function.add_to_role_policy(
+                iam.PolicyStatement(
+                    actions=[
+                        "xray:PutSpans",
+                        "xray:PutSpansForIndexing",
+                        "xray:PutTraceSegments",
+                        "xray:PutTelemetryRecords",
+                    ],
+                    resources=["*"],
+                )
+            )
+
+        # SnapStart only activates on published versions. Create a version and
+        # alias so that API Gateway integrates with a versioned function rather
+        # than $LATEST, which would bypass the snapshot entirely.
+        live_alias = aws_lambda.Alias(
+            self,
+            f"{id}-live",
+            alias_name="live",
+            version=lambda_function.current_version,
+        )
 
         api = apigw.HttpApi(
             self,
             f"{id}-endpoint",
             default_integration=HttpLambdaIntegration(
                 f"{id}-integration",
-                lambda_function,
+                live_alias,
                 parameter_mapping=apigw.ParameterMapping().overwrite_header(
                     "host",
                     apigw.MappingValue(stack_settings.veda_custom_host),
@@ -204,26 +231,6 @@ class LambdaStack(Stack):
 
 app = App()
 
-perms = []
-if app_settings.buckets:
-    perms.append(
-        iam.PolicyStatement(
-            actions=["s3:GetObject"],
-            resources=[f"arn:aws:s3:::{bucket}*" for bucket in app_settings.buckets],
-        )
-    )
-
-# Add X-Ray permissions for tracing
-perms.append(
-    iam.PolicyStatement(
-        actions=[
-            "xray:PutTraceSegments",
-            "xray:PutTelemetryRecords",
-        ],
-        resources=["*"],
-    )
-)
-
 
 lambda_stack = LambdaStack(
     app,
@@ -231,7 +238,6 @@ lambda_stack = LambdaStack(
     memory=10240,
     timeout=app_settings.timeout,
     concurrent=app_settings.max_concurrent,
-    permissions=perms,
     environment=app_settings.additional_env,
     env=stack_settings.cdk_env(),  # deploy env settings (account, region) passed to Stack.__init__()
 )

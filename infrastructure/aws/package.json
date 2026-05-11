@@ -5,9 +5,9 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "cdk": "^2.177.0"
+    "aws-cdk": "2.1121.0"
   },
   "scripts": {
-    "cdk": "cdk"
+    "cdk": "node ./node_modules/aws-cdk/bin/cdk"
   }
 }
