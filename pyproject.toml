@@ -35,7 +35,7 @@ dependencies = [
     "h5py>=3.16.0",
     "icechunk>=2.0.4",
     "numpy",
-    "obstore==0.8.2",
+    "obstore>=0.9.4",
     "pydantic-settings~=2.14",
     "pydantic>=2.13.3,<3.0",
     "redis",
