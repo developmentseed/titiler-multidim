@@ -48,7 +48,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import httpx
+import httpx2 as httpx
 import morecantile
 
 # Test parameters

@@ -172,6 +172,7 @@ class XarrayTilerFactory(BaseTilerFactory):
 
                 tms = self.supported_tms.get(tileMatrixSetId)
                 return titiler_templates.TemplateResponse(
+                    request,
                     name="map.html",
                     context={
                         "request": request,
@@ -183,6 +184,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                 )
             else:
                 return local_templates.TemplateResponse(
+                    request,
                     name="map-form.html",
                     context={
                         "request": request,

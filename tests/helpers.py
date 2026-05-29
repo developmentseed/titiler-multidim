@@ -1,6 +1,6 @@
 """Functions to simplify writing tests."""
 
-import httpx
+import httpx2 as httpx
 
 
 def find_string_in_stream(response: httpx.Response, target: str) -> bool:
