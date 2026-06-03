@@ -51,7 +51,7 @@ server = [
     "uvicorn"
 ]
 lambda = [
-    "mangum==0.19.0",
+    "mangum==0.21.0",
     "aiobotocore>=2.24.0,<2.24.2",
     "opentelemetry-exporter-otlp-proto-http>=1.40.0",
     "opentelemetry-instrumentation-fastapi>=0.61b0",
@@ -80,7 +80,7 @@ dev = [
     "virtualizarr",
 ]
 deployment = [
-    "aws-cdk-lib==2.253.1",
+    "aws-cdk-lib==2.257.0",
     "constructs>=10.5.0,<11.0.0",
     "pydantic-settings~=2.14",
     "python-dotenv>=1.2.2",
