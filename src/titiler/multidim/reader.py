@@ -205,37 +205,30 @@ class XarrayReader(Reader):
     """Custom XarrayReader with redis cache"""
 
     def __attrs_post_init__(self):
-        """Set bounds and CRS."""
-        self.opener = guess_opener
-        ds = None
-        # Generate cache key and attempt to fetch the dataset from cache
-        cache_key = f"{self.src_path}_group:{self.group}_time:{self.decode_times}"
+        """Configure the cached opener before the parent reads the dataset."""
+        self.opener_options = _inject_settings(
+            self.opener_options, api_settings, "authorize_virtual_chunk_access"
+        )
+        self.opener = self._open_cached
+        super().__attrs_post_init__()
+
+    def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
+        """Open a dataset, reusing its Redis cache entry when enabled."""
+        cache_key = (
+            f"{src_path}_group:{kwargs.get('group')}_time:{kwargs.get('decode_times')}"
+        )
 
         if api_settings.enable_cache:
             data_bytes = cache_client.get(cache_key)
             if data_bytes:
-                print(f"Found dataset in Cache {cache_key}")
-                ds = pickle.loads(data_bytes)
+                return pickle.loads(data_bytes)
 
-        self.opener_options = _inject_settings(
-            self.opener_options, api_settings, "authorize_virtual_chunk_access"
-        )
+        ds = guess_opener(src_path, **kwargs)
 
-        self.ds = ds or self.opener(
-            self.src_path,
-            group=self.group,
-            decode_times=self.decode_times,
-            **self.opener_options,
-        )
+        if api_settings.enable_cache:
+            cache_client.set(cache_key, pickle.dumps(ds), ex=300)
 
-        if not ds and api_settings.enable_cache:
-            # Serialize the dataset to bytes using pickle
-            cache_key = f"{self.src_path}_group:{self.group}_time:{self.decode_times}"
-            data_bytes = pickle.dumps(self.ds)
-            print(f"Adding dataset in Cache: {cache_key}")
-            cache_client.set(cache_key, data_bytes, ex=300)
-
-        super().__attrs_post_init__()
+        return ds
 
     @classmethod
     def list_variables(
