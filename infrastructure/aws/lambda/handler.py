@@ -167,7 +167,10 @@ if "AWS_EXECUTION_ENV" in os.environ and api_settings.telemetry_enabled:
 
         def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
             """Add SigV4 Authorization header to the request."""
-            credentials = BotocoreSession().get_credentials().get_frozen_credentials()
+            credentials = BotocoreSession().get_credentials()
+            if credentials is None:
+                raise RuntimeError("AWS credentials are required to sign OTLP requests")
+            frozen_credentials = credentials.get_frozen_credentials()
             parsed = urlparse(r.url)
             body = r.body if r.body is not None else b""
             body_bytes = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -189,9 +192,9 @@ if "AWS_EXECUTION_ENV" in os.environ and api_settings.telemetry_enabled:
                 data=body_bytes,
                 headers=sign_headers,
             )
-            botocore.auth.SigV4Auth(credentials, self._service, self._region).add_auth(
-                aws_req
-            )
+            botocore.auth.SigV4Auth(
+                frozen_credentials, self._service, self._region
+            ).add_auth(aws_req)
             for key in (
                 "Authorization",
                 "X-Amz-Date",

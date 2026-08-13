@@ -114,16 +114,9 @@ class XarrayTilerFactory(BaseTilerFactory):
                 ),
             ] = True,
             sel: Annotated[
-                Optional[str],
+                Optional[List[str]],
                 Query(
-                    description="Xarray Indexing using dimension names `{dimension}={value}`.",
-                ),
-            ] = None,
-            method: Annotated[
-                Optional[Literal["nearest", "pad", "ffill", "backfill", "bfill"]],
-                Query(
-                    alias="sel_method",
-                    description="Xarray indexing method to use for inexact matches.",
+                    description="Xarray Indexing using `{dimension}={value}` or `{dimension}={method}::{value}`.",
                 ),
             ] = None,
             tile_format: Annotated[
@@ -132,12 +125,10 @@ class XarrayTilerFactory(BaseTilerFactory):
                     description="Default will be automatically defined if the output image needs a mask (png) or not (jpeg).",
                 ),
             ] = None,
-            tile_scale: Annotated[
+            tilesize: Annotated[
                 int,
-                Query(
-                    gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-                ),
-            ] = 1,
+                Query(gt=0, description="Tilesize in pixels. Default to 256."),
+            ] = 256,
             minzoom: Annotated[
                 Optional[int],
                 Query(description="Overwrite default minzoom."),
@@ -167,8 +158,10 @@ class XarrayTilerFactory(BaseTilerFactory):
                 tilejson_url = self.url_for(
                     request, "tilejson", tileMatrixSetId=tileMatrixSetId
                 )
-                if request.query_params._list:
-                    tilejson_url += f"?{urlencode(request.query_params._list)}"
+                qs = list(request.query_params._list)
+                if "tilesize" not in request.query_params:
+                    qs.append(("tilesize", tilesize))
+                tilejson_url += f"?{urlencode(qs)}"
 
                 tms = self.supported_tms.get(tileMatrixSetId)
                 return titiler_templates.TemplateResponse(

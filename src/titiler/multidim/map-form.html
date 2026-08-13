@@ -267,12 +267,6 @@
                     return typeof str === 'string' && str.length > 0;
                 }
 
-                function isStringInteger(str) {
-                    if (!str.trim()) return false;  // Check for empty strings after trimming white space
-                    const num = parseFloat(str);
-                    return !isNaN(num) && Number.isInteger(num) && String(num) === str;
-                }
-
                 document.getElementById("get-histogram-btn").addEventListener("click", function() {
                     const loadingIcon = document.getElementById('loading-icon-histogram');
                     loadingIcon.style.display = 'inline-block';
@@ -352,9 +346,6 @@
                         }
                         if (isNonEmptyString(groupValue)) {
                             href += `&group=${groupValue}`;
-                        }
-                        if (isStringInteger(groupValue)) {
-                            href += `&multiscale=true`;
                         }
                         window.location.href = href;
                     }

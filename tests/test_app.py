@@ -222,10 +222,20 @@ def test_map_with_params(store_params, app):
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, '<div id="map"></div>')
+    assert find_string_in_stream(response, "tilesize=256")
+
+
+def test_tilejson_forwards_tilesize(app):
+    params = {**store_params["zarr_store_v2"]["params"], "tilesize": 256}
+    response = app.get("/WebMercatorQuad/tilejson.json", params=params)
+
+    assert response.status_code == 200
+    assert "@" not in response.json()["tiles"][0]
+    assert "tilesize=256" in response.json()["tiles"][0]
 
 
 def test_sel_nearest_netcdf(app):
     params = store_params["netcdf_store"]["params"].copy()
-    params.update({"sel": "time=2020-01-06", "sel_method": "nearest"})
+    params["sel"] = "time=nearest::2020-01-06"
     response = app.get("/info", params=params)
     assert response.status_code == 200
