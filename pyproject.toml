@@ -33,17 +33,17 @@ dependencies = [
     "fsspec",
     "h5netcdf",
     "h5py>=3.16.0",
-    "icechunk>=2.0.4",
+    "icechunk>=2.1.2",
     "numpy",
-    "obstore>=0.9.4",
-    "pydantic-settings~=2.14",
+    "obstore>=0.11.0",
+    "pydantic-settings~=2.15",
     "pydantic>=2.13.3,<3.0",
     "redis",
     "requests",
     "rioxarray",
     "s3fs",
-    "xarray>=2025.10.1",
-    "zarr>=3.2.0",
+    "xarray>=2026.7.0",
+    "zarr>=3.3.0",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +53,7 @@ server = [
 lambda = [
     "mangum==0.21.0",
     "aiobotocore>=2.24.0,<2.24.2",
-    "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.44.0",
     "opentelemetry-instrumentation-fastapi>=0.61b0",
     "opentelemetry-instrumentation-httpx>=0.61b0",
     "opentelemetry-instrumentation-logging>=0.61b0",
@@ -64,25 +64,25 @@ lambda = [
 
 [dependency-groups]
 dev = [
-    "dask>=2026.3.0",
-    "fakeredis>=2.35.1",
+    "dask>=2026.7.1",
+    "fakeredis>=2.37.0",
     "httpx2",
-    "ipykernel>=7.2.0",
-    "ipython>=9.13.0",
+    "ipykernel>=7.3.0",
+    "ipython>=9.16.1",
     "netcdf4>=1.7.4",
-    "pre-commit>=4.6.0",
+    "pre-commit>=4.6.1",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=7.1.0",
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-xdist",
-    "ruff>=0.15.12",
-    "uvicorn>=0.46.0",
+    "ruff>=0.16.2",
+    "uvicorn>=0.52.1",
     "virtualizarr",
 ]
 deployment = [
-    "aws-cdk-lib==2.257.0",
-    "constructs>=10.5.0,<11.0.0",
-    "pydantic-settings~=2.14",
+    "aws-cdk-lib==2.263.0",
+    "constructs>=10.8.1,<11.0.0",
+    "pydantic-settings~=2.15",
     "python-dotenv>=1.2.2",
 ]
 notebooks = [
