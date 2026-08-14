@@ -8,7 +8,7 @@ import numpy as np
 from attrs import define
 from fastapi import Depends, Query
 from starlette.requests import Request
-from starlette.responses import HTMLResponse
+from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.templating import Jinja2Templates
 from typing_extensions import Annotated
 
@@ -86,9 +86,17 @@ class XarrayTilerFactory(BaseTilerFactory):
                 return hist_dict
 
     def map_viewer(self) -> None:
-        """Register /map endpoints"""
+        """Register /map.html endpoint and redirect legacy /map URLs."""
 
-        @self.router.get("/{tileMatrixSetId}/map", response_class=HTMLResponse)
+        @self.router.get("/{tileMatrixSetId}/map", include_in_schema=False)
+        def map_redirect(request: Request, tileMatrixSetId: str):
+            """Redirect legacy map URLs."""
+            url = f"{request.url.path}.html"
+            if request.url.query:
+                url += f"?{request.url.query}"
+            return RedirectResponse(url)
+
+        @self.router.get("/{tileMatrixSetId}/map.html", response_class=HTMLResponse)
         def map_viewer(
             request: Request,
             tileMatrixSetId: Annotated[  # type: ignore
@@ -114,16 +122,9 @@ class XarrayTilerFactory(BaseTilerFactory):
                 ),
             ] = True,
             sel: Annotated[
-                Optional[str],
+                Optional[List[str]],
                 Query(
-                    description="Xarray Indexing using dimension names `{dimension}={value}`.",
-                ),
-            ] = None,
-            method: Annotated[
-                Optional[Literal["nearest", "pad", "ffill", "backfill", "bfill"]],
-                Query(
-                    alias="sel_method",
-                    description="Xarray indexing method to use for inexact matches.",
+                    description="Xarray Indexing using `{dimension}={value}` or `{dimension}={method}::{value}`.",
                 ),
             ] = None,
             tile_format: Annotated[
@@ -132,12 +133,10 @@ class XarrayTilerFactory(BaseTilerFactory):
                     description="Default will be automatically defined if the output image needs a mask (png) or not (jpeg).",
                 ),
             ] = None,
-            tile_scale: Annotated[
+            tilesize: Annotated[
                 int,
-                Query(
-                    gt=0, lt=4, description="Tile size scale. 1=256x256, 2=512x512..."
-                ),
-            ] = 1,
+                Query(gt=0, description="Tilesize in pixels. Default to 256."),
+            ] = 256,
             minzoom: Annotated[
                 Optional[int],
                 Query(description="Overwrite default minzoom."),
@@ -167,8 +166,28 @@ class XarrayTilerFactory(BaseTilerFactory):
                 tilejson_url = self.url_for(
                     request, "tilejson", tileMatrixSetId=tileMatrixSetId
                 )
-                if request.query_params._list:
-                    tilejson_url += f"?{urlencode(request.query_params._list)}"
+                qs = list(request.query_params._list)
+                if "tilesize" not in request.query_params:
+                    qs.append(("tilesize", tilesize))
+                tilejson_url += f"?{urlencode(qs)}"
+
+                point_url = self.url_for(request, "point", lon="{lon}", lat="{lat}")
+                point_qs = [
+                    (key, value)
+                    for key, value in request.query_params._list
+                    if key.lower()
+                    not in {
+                        "tilesize",
+                        "tile_format",
+                        "minzoom",
+                        "maxzoom",
+                        "buffer",
+                        "padding",
+                        "colormap",
+                        "colormap_name",
+                    }
+                ]
+                point_url += f"?{urlencode(point_qs)}"
 
                 tms = self.supported_tms.get(tileMatrixSetId)
                 return titiler_templates.TemplateResponse(
@@ -177,6 +196,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                     context={
                         "request": request,
                         "tilejson_endpoint": tilejson_url,
+                        "point_endpoint": point_url,
                         "tms": tms,
                         "resolutions": [matrix.cellSize for matrix in tms],
                     },

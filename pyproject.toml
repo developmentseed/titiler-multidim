@@ -23,8 +23,8 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "titiler-core>=0.25.0,<0.26",
-    "titiler-xarray>=0.25.0,<0.26",
+    "titiler-core>=2.2.1,<3.0",
+    "titiler-xarray>=2.2.1,<3.0",
     "aiobotocore>=2.24.0",
     "aiohttp",
     "boto3>=1.39.0",

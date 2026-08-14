@@ -193,7 +193,7 @@ done
 find . -type d -name '__pycache__' -print0 | xargs -0 rm -rf
 find . -type f -name '*.py'        -print0 | xargs -0 rm -f
 find . -type d -name 'tests'       -print0 | xargs -0 rm -rf
-rm -rdf numpy/doc/ bin geos_license Misc boto3* botocore*
+rm -rdf numpy/doc/ bin geos_license Misc 
 find . -type f -name '*.so*' -exec strip --strip-unneeded {} \;
 EOF
 
