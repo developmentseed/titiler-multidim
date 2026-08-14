@@ -1,5 +1,6 @@
 import json
 import os
+from urllib.parse import urlencode
 
 import pytest
 from helpers import find_string_in_stream
@@ -223,6 +224,10 @@ def test_map_with_params(store_params, app):
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, '<div id="map"></div>')
     assert find_string_in_stream(response, "tilesize=256")
+    point_query = urlencode({"url": store_path, "variable": variable})
+    assert find_string_in_stream(
+        response, f"point/{{lon}},{{lat}}?{point_query}`.replace"
+    )
 
 
 def test_tilejson_forwards_tilesize(app):

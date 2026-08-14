@@ -163,6 +163,24 @@ class XarrayTilerFactory(BaseTilerFactory):
                     qs.append(("tilesize", tilesize))
                 tilejson_url += f"?{urlencode(qs)}"
 
+                point_url = self.url_for(request, "point", lon="{lon}", lat="{lat}")
+                point_qs = [
+                    (key, value)
+                    for key, value in request.query_params._list
+                    if key.lower()
+                    not in {
+                        "tilesize",
+                        "tile_format",
+                        "minzoom",
+                        "maxzoom",
+                        "buffer",
+                        "padding",
+                        "colormap",
+                        "colormap_name",
+                    }
+                ]
+                point_url += f"?{urlencode(point_qs)}"
+
                 tms = self.supported_tms.get(tileMatrixSetId)
                 return titiler_templates.TemplateResponse(
                     request,
@@ -170,6 +188,7 @@ class XarrayTilerFactory(BaseTilerFactory):
                     context={
                         "request": request,
                         "tilejson_endpoint": tilejson_url,
+                        "point_endpoint": point_url,
                         "tms": tms,
                         "resolutions": [matrix.cellSize for matrix in tms],
                     },
