@@ -207,7 +207,7 @@ def test_histogram_error(store_params, app):
 
 
 def test_map_without_params(app):
-    response = app.get("/WebMercatorQuad/map")
+    response = app.get("/WebMercatorQuad/map.html")
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
     assert find_string_in_stream(response, "Step 1: Enter the URL of your Zarr store")
@@ -218,7 +218,7 @@ def test_map_with_params(store_params, app):
     store_path = store_params["params"]["url"]
     variable = store_params["variables"][0]
     response = app.get(
-        "/WebMercatorQuad/map", params={"url": store_path, "variable": variable}
+        "/WebMercatorQuad/map.html", params={"url": store_path, "variable": variable}
     )
     assert response.status_code == 200
     assert response.headers["Content-Type"] == "text/html; charset=utf-8"
@@ -227,6 +227,16 @@ def test_map_with_params(store_params, app):
     point_query = urlencode({"url": store_path, "variable": variable})
     assert find_string_in_stream(
         response, f"point/{{lon}},{{lat}}?{point_query}`.replace"
+    )
+
+
+def test_legacy_map_redirect(app):
+    params = {"url": test_zarr_store_v2, "variable": "CDD0"}
+    response = app.get("/WebMercatorQuad/map", params=params, follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == (
+        f"/WebMercatorQuad/map.html?{urlencode(params)}"
     )
 
 

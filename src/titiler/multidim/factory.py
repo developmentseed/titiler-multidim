@@ -8,7 +8,7 @@ import numpy as np
 from attrs import define
 from fastapi import Depends, Query
 from starlette.requests import Request
-from starlette.responses import HTMLResponse
+from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.templating import Jinja2Templates
 from typing_extensions import Annotated
 
@@ -86,9 +86,17 @@ class XarrayTilerFactory(BaseTilerFactory):
                 return hist_dict
 
     def map_viewer(self) -> None:
-        """Register /map endpoints"""
+        """Register /map.html endpoint and redirect legacy /map URLs."""
 
-        @self.router.get("/{tileMatrixSetId}/map", response_class=HTMLResponse)
+        @self.router.get("/{tileMatrixSetId}/map", include_in_schema=False)
+        def map_redirect(request: Request, tileMatrixSetId: str):
+            """Redirect legacy map URLs."""
+            url = f"{request.url.path}.html"
+            if request.url.query:
+                url += f"?{request.url.query}"
+            return RedirectResponse(url)
+
+        @self.router.get("/{tileMatrixSetId}/map.html", response_class=HTMLResponse)
         def map_viewer(
             request: Request,
             tileMatrixSetId: Annotated[  # type: ignore
