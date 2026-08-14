@@ -68,3 +68,8 @@ jobs:
         with:
           dir: "./infrastructure/aws"
           env_aws_secret_name: ""
+
+      - name: Smoke-test deployed Icechunk tiles
+        run: |
+          API_URL="$(jq -er 'to_entries[] | select(.value.Endpoint) | .value.Endpoint' "$HOME/cdk-outputs.json")"
+          uv run python scripts/test_deployment.py --api-url "$API_URL"

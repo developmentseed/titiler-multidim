@@ -57,8 +57,16 @@ uv run pytest tests/test_app.py::test_get_info
 ## VEDA Deployment
 
 * **Production deployments** are handled in the [NASA-IMPACT/veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repository.
-* **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository.
+* **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository. Each deployment requests a tile from the public native MUR, virtual MUR, and virtual NLDAS Icechunk stores.
 * **CDK synth checks** can be triggered by applying the `run-cdk-checks` label to a pull request in this repository. This check only runs when the label is added, so if new commits are pushed later the label must be removed and added again.
+
+To run the same deployment smoke test manually:
+
+```bash
+uv run python scripts/test_deployment.py --api-url https://your-api.execute-api.us-west-2.amazonaws.com
+```
+
+The RASI historical Icechunk store is intentionally excluded because its source data are corrupted.
 
 ## New Deployments
 
@@ -68,7 +76,7 @@ The following steps detail how to to setup and deploy the CDK stack from your lo
 
     ```bash
     # Download titiler repo
-    git clone https://github.com/developmentseed/titiler-xarray.git
+    git clone https://github.com/developmentseed/titiler-multidim.git
 
     # Install with the deployment dependencies
     uv sync --group deployment
