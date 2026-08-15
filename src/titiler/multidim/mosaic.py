@@ -40,7 +40,6 @@ class XarrayMosaicBackend(BaseBackend):
                         for dimension in src.input.dims
                         if dimension not in {src.input.rio.x_dim, src.input.rio.y_dim}
                     ),
-                    tuple(src.band_descriptions),
                     repr(info["band_metadata"]),
                     info["nodata_type"],
                 )
@@ -53,12 +52,7 @@ class XarrayMosaicBackend(BaseBackend):
                 zooms.append((src.minzoom, src.maxzoom))
 
         self.crs = WGS84_CRS
-        self.bounds = (
-            min(bounds[0] for bounds in self._asset_bounds),
-            min(bounds[1] for bounds in self._asset_bounds),
-            max(bounds[2] for bounds in self._asset_bounds),
-            max(bounds[3] for bounds in self._asset_bounds),
-        )
+        self.bounds = self._mosaic_bounds()
         self.minzoom = min(zoom[0] for zoom in zooms)
         self.maxzoom = max(zoom[1] for zoom in zooms)
 
@@ -141,14 +135,59 @@ class XarrayMosaicBackend(BaseBackend):
             **kwargs,
         )
 
+    @staticmethod
+    def _longitude_intervals(
+        west: float, east: float
+    ) -> tuple[tuple[float, float], ...]:
+        """Split a WGS84 longitude range at the antimeridian when needed."""
+        return ((west, east),) if west <= east else ((west, 180), (-180, east))
+
+    def _mosaic_bounds(self) -> BBox:
+        """Return the smallest WGS84 bounding box containing every asset."""
+        intervals = sorted(
+            interval
+            for bounds in self._asset_bounds
+            for interval in self._longitude_intervals(bounds[0], bounds[2])
+        )
+        merged: list[tuple[float, float]] = []
+        for west, east in intervals:
+            if merged and west <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], east))
+            else:
+                merged.append((west, east))
+
+        if merged == [(-180, 180)]:
+            west, east = -180, 180
+        else:
+            _, west, east = max(
+                (
+                    ((next_west - current_east) % 360, next_west, current_east)
+                    for (_, current_east), (next_west, _) in zip(
+                        merged, merged[1:] + merged[:1]
+                    )
+                ),
+                key=lambda gap: gap[0],
+            )
+
+        return (
+            west,
+            min(bounds[1] for bounds in self._asset_bounds),
+            east,
+            max(bounds[3] for bounds in self._asset_bounds),
+        )
+
     def _assets_for_bounds(self, query_bounds: BBox) -> list[str]:
         """Filter cached WGS84 bounds without changing input order."""
         xmin, ymin, xmax, ymax = query_bounds
+        query_longitudes = self._longitude_intervals(xmin, xmax)
         return [
             asset
             for asset, bounds in zip(self.input, self._asset_bounds)
-            if bounds[0] <= xmax
-            and bounds[2] >= xmin
-            and bounds[1] <= ymax
+            if bounds[1] <= ymax
             and bounds[3] >= ymin
+            and any(
+                west <= query_east and east >= query_west
+                for west, east in self._longitude_intervals(bounds[0], bounds[2])
+                for query_west, query_east in query_longitudes
+            )
         ]

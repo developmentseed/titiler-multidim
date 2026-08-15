@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import xarray as xr
+from rasterio.crs import CRS
 from obstore.exceptions import GenericError
 from rio_tiler.mosaic.methods.defaults import FirstMethod, HighestMethod
 from titiler.core.errors import BadRequestError
@@ -32,6 +33,36 @@ def write_dataset(path, value, *, x=(-5.0, 5.0), times=None, extra_variable=Fals
     dataset.to_netcdf(path, engine="h5netcdf")
 
 
+def write_antimeridian_dataset(path):
+    """Write a polar stereographic dataset that crosses the antimeridian."""
+    dataset = xr.Dataset(
+        {"data": (("y", "x"), np.ones((553, 825), dtype="float32"))},
+        coords={
+            "x": np.linspace(-2622372.468724773, 2288852.531275227, 825),
+            "y": np.linspace(-4813079.750943905, -1521070.7509439047, 553),
+        },
+    ).rio.write_crs(
+        CRS.from_proj4(
+            "+proj=stere +lat_0=90 +lat_ts=60 +lon_0=210 "
+            "+a=6371229 +b=6371229 +units=m +no_defs"
+        )
+    )
+    dataset.to_netcdf(path, engine="h5netcdf")
+
+
+def write_coordinate_labeled_dataset(path, label):
+    """Write a geographic dataset with an auxiliary display coordinate."""
+    dataset = xr.Dataset(
+        {"data": (("y", "x"), np.ones((2, 2), dtype="float32"))},
+        coords={
+            "x": [-5.0, 5.0],
+            "y": [-5.0, 5.0],
+            "label": (("y", "x"), np.full((2, 2), label)),
+        },
+    ).rio.write_crs("EPSG:4326")
+    dataset.to_netcdf(path, engine="h5netcdf")
+
+
 @pytest.fixture
 def sources(tmp_path):
     """Create compatible adjacent and overlapping Xarray sources."""
@@ -57,6 +88,47 @@ def test_backend_filters_assets_in_request_order(sources, reader_cls):
 
     assert backend.assets_for_bbox(-6, -1, 6, 1) == [str(left), str(right)]
     assert backend.assets_for_point(5, 0) == [str(right)]
+
+
+def test_backend_selects_antimeridian_crossing_assets(tmp_path, reader_cls):
+    """Antimeridian-crossing source bounds include points on both sides."""
+    source = tmp_path / "antimeridian.nc"
+    write_antimeridian_dataset(source)
+    backend = XarrayMosaicBackend(
+        [str(source)], reader=reader_cls, reader_options={"variable": "data"}
+    )
+
+    assert backend.assets_for_point(170, 60) == [str(source)]
+    assert backend.assets_for_point(-150, 60) == [str(source)]
+
+
+def test_backend_reports_antimeridian_crossing_mosaic_bounds(sources, reader_cls):
+    """Adjacent sources across the antimeridian retain wrapped bounds."""
+    west, east, _, _ = sources
+    write_dataset(west, 1, x=(172.5, 177.5))
+    write_dataset(east, 2, x=(-177.5, -172.5))
+
+    backend = XarrayMosaicBackend(
+        [str(west), str(east)], reader=reader_cls, reader_options={"variable": "data"}
+    )
+
+    assert backend.bounds == (170.0, -10.0, -170.0, 10.0)
+
+
+def test_backend_ignores_auxiliary_coordinate_labels(tmp_path, reader_cls):
+    """Auxiliary coordinates do not make compatible sources incompatible."""
+    first = tmp_path / "first.nc"
+    second = tmp_path / "second.nc"
+    write_coordinate_labeled_dataset(first, 1)
+    write_coordinate_labeled_dataset(second, 2)
+
+    backend = XarrayMosaicBackend(
+        [str(first), str(second)],
+        reader=reader_cls,
+        reader_options={"variable": "data"},
+    )
+
+    assert backend.assets_for_point(0, 0) == [str(first), str(second)]
 
 
 def test_backend_composes_points_with_requested_strategy(sources, reader_cls):
