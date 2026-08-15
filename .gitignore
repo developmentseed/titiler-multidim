@@ -109,3 +109,6 @@ cdk.context.json
 
 .test-deploy-env
 .vscode/settings.json
+
+dev-docs/brainstorms/
+dev-docs/plans/

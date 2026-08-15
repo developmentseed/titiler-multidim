@@ -22,6 +22,16 @@ uv run uvicorn titiler.multidim.main:app --reload
 To access the docs, visit <http://127.0.0.1:8000/api.html>.
 ![](https://github.com/developmentseed/titiler-multidim/assets/10407788/4368546b-5b60-4cd5-86be-fdd959374b17)
 
+## Mosaic requests
+
+Every Xarray data endpoint accepts one to twenty ordered `url` query values. Reuse the same `variable`, `group`, `decode_times`, and `sel` parameters for each source; no MosaicJSON or STAC manifest is needed. Overlapping valid pixels use the first URL by default (set `pixel_selection` to another supported rio-tiler strategy when needed).
+
+```bash
+curl 'http://127.0.0.1:8000/tiles/WebMercatorQuad/0/0/0.png?url=https%3A%2F%2Fexample.com%2Fpriority.zarr&url=https%3A%2F%2Fexample.com%2Ffallback.zarr&variable=temperature&sel=time%3D0'
+```
+
+All sources must expose compatible selected data.
+
 ## TiTiler 2 migration
 
 TiTiler 2 is a breaking API upgrade:
