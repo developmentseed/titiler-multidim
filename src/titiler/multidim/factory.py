@@ -7,8 +7,8 @@ from urllib.parse import urlencode
 import jinja2
 import numpy as np
 from attrs import define
-from fastapi import Body, Depends, Path, Query
-from geojson_pydantic.features import Feature, FeatureCollection
+from fastapi import Depends, Path, Query
+from geojson_pydantic.features import Feature
 from rio_tiler.constants import WGS84_CRS
 from rio_tiler.models import Info
 from starlette.requests import Request
@@ -17,14 +17,12 @@ from starlette.templating import Jinja2Templates
 from titiler.core.dependencies import (
     BidxParams,
     CoordCRSParams,
-    CoverScaleParams,
     CRSParams,
     DefaultDependency,
-    DstCRSParams,
 )
 from titiler.core.errors import BadRequestError
 from titiler.core.models.mapbox import TileJSON
-from titiler.core.models.responses import InfoGeoJSON, Point, StatisticsGeoJSON
+from titiler.core.models.responses import InfoGeoJSON, Point
 from titiler.core.resources.enums import ImageType
 from titiler.core.resources.responses import GeoJSONResponse, JSONResponse
 from titiler.core.utils import bounds_to_geometry
@@ -261,77 +259,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
     def statistics(self) -> None:
         """Register strategy-composited statistics without mosaic-only fields."""
 
-        @self.router.post(
-            "/statistics",
-            response_model=StatisticsGeoJSON,
-            response_model_exclude_none=True,
-            response_class=GeoJSONResponse,
-            responses={
-                200: {
-                    "content": {"application/geo+json": {}},
-                    "description": "Return statistics for geojson features.",
-                }
-            },
-            operation_id=f"{self.operation_prefix}postStatisticsForGeoJSON",
-        )
-        def geojson_statistics(
-            geojson: Annotated[
-                FeatureCollection | Feature,
-                Body(description="GeoJSON Feature or FeatureCollection."),
-            ],
-            src_path=Depends(self.path_dependency),
-            reader_params=Depends(self.reader_dependency),
-            coord_crs=Depends(CoordCRSParams),
-            dst_crs=Depends(DstCRSParams),
-            layer_params=Depends(self.layer_dependency),
-            dataset_params=Depends(self.dataset_dependency),
-            pixel_selection=Depends(self.pixel_selection_dependency),
-            image_params=Depends(self.img_part_dependency),
-            cover_scale=Depends(CoverScaleParams),
-            post_process=Depends(self.process_dependency),
-            stats_params=Depends(self.stats_dependency),
-            histogram_params=Depends(self.histogram_dependency),
-        ):
-            """Calculate statistics from composited feature pixels."""
-            collection = (
-                FeatureCollection(type="FeatureCollection", features=[geojson])
-                if isinstance(geojson, Feature)
-                else geojson
-            )
-            with self.backend(
-                src_path,
-                reader=self.dataset_reader,
-                reader_options=reader_params.as_dict(),
-            ) as src:
-                for feature in collection.features:
-                    shape = feature.model_dump(exclude_none=True)
-                    image, _ = src.feature(
-                        shape,
-                        shape_crs=coord_crs or WGS84_CRS,
-                        dst_crs=dst_crs,
-                        align_bounds_with_dataset=True,
-                        pixel_selection=pixel_selection,
-                        threads=MOSAIC_THREADS,
-                        **layer_params.as_dict(),
-                        **dataset_params.as_dict(),
-                        **image_params.as_dict(),
-                    )
-                    coverage = image.get_coverage_array(
-                        shape,
-                        shape_crs=coord_crs or WGS84_CRS,
-                        cover_scale=cover_scale,
-                    )
-                    if post_process:
-                        image = post_process(image)
-                    feature.properties = feature.properties or {}
-                    feature.properties["statistics"] = image.statistics(
-                        **stats_params.as_dict(),
-                        hist_options=histogram_params.as_dict(),
-                        coverage=coverage,
-                    )
-            return (
-                collection.features[0] if isinstance(geojson, Feature) else collection
-            )
+        super().statistics()
 
         @self.router.get(
             "/histogram",
@@ -345,22 +273,20 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
             pixel_selection=Depends(self.pixel_selection_dependency),
         ):
             """Return a native or strategy-composited ten-bucket histogram."""
-            if len(src_path) == 1:
-                with self.dataset_reader(src_path[0], **reader_params.as_dict()) as src:
-                    values = src.input.values[~np.isnan(src.input)]
-            else:
-                with self.backend(
-                    src_path,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    image, _ = src.part(
-                        src.bounds,
-                        pixel_selection=pixel_selection,
-                        threads=MOSAIC_THREADS,
-                    )
-                    values = image.array.compressed()
+            with self.backend(
+                src_path,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                image, _ = src.part(
+                    src.bounds,
+                    pixel_selection=pixel_selection,
+                    threads=MOSAIC_THREADS,
+                )
+                values = image.array.compressed()
+
             counts, edges = np.histogram(values, bins=10)
+
             return [
                 {"bucket": edges[index : index + 2].tolist(), "value": count}
                 for index, count in enumerate(counts.tolist())
