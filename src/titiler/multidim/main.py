@@ -15,7 +15,7 @@ from titiler.core.middleware import (
 )
 
 from titiler.multidim import __version__ as titiler_version
-from titiler.multidim.factory import XarrayTilerFactory
+from titiler.multidim.factory import XarrayMosaicTilerFactory
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
@@ -35,7 +35,9 @@ app = FastAPI(
 
 ###############################################################################
 # Tiles endpoints
-xarray_factory = XarrayTilerFactory(enable_telemetry=api_settings.telemetry_enabled)
+xarray_factory = XarrayMosaicTilerFactory(
+    enable_telemetry=api_settings.telemetry_enabled
+)
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
 
 ###############################################################################

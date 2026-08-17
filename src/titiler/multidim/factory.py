@@ -6,7 +6,6 @@ from urllib.parse import urlencode
 
 import jinja2
 import numpy as np
-import rasterio
 from attrs import define
 from fastapi import Body, Depends, Path, Query
 from geojson_pydantic.features import Feature, FeatureCollection
@@ -53,8 +52,8 @@ def DatasetPathParams(
 
 
 @define(kw_only=True)
-class XarrayTilerFactory(MosaicTilerFactory):
-    """Serve the established Xarray API over one or more Xarray sources."""
+class XarrayMosaicTilerFactory(MosaicTilerFactory):
+    """Xarray Mosaic Tiler Factory"""
 
     backend: type[XarrayMosaicBackend] = XarrayMosaicBackend
     dataset_reader: type[XarrayReader] = XarrayReader
@@ -94,25 +93,23 @@ class XarrayTilerFactory(MosaicTilerFactory):
                 bool | None,
                 Query(description="Show info about the time dimension"),
             ] = None,
-            env=Depends(self.environment_dependency),
         ):
             """Return native source info or aggregate mosaic info."""
-            with rasterio.Env(**env):
-                with self.backend(
-                    src_path,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    info = src.info()
-                    if show_times and len(src_path) == 1:
-                        with self.dataset_reader(
-                            src_path[0], **reader_params.as_dict()
-                        ) as source:
-                            if "time" in source.input.dims:
-                                info["count"] = len(source.input.time)
-                                info["times"] = [
-                                    str(value.data) for value in source.input.time
-                                ]
+            with self.backend(
+                src_path,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                info = src.info()
+                if show_times and len(src_path) == 1:
+                    with self.dataset_reader(
+                        src_path[0], **reader_params.as_dict()
+                    ) as source:
+                        if "time" in source.input.dims:
+                            info["count"] = len(source.input.time)
+                            info["times"] = [
+                                str(value.data) for value in source.input.time
+                            ]
             return info
 
         @self.router.get(
@@ -132,22 +129,20 @@ class XarrayTilerFactory(MosaicTilerFactory):
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
             crs=Depends(CRSParams),
-            env=Depends(self.environment_dependency),
         ):
             """Return native source info or aggregate mosaic info as GeoJSON."""
-            with rasterio.Env(**env):
-                with self.backend(
-                    src_path,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    bounds = src.get_geographic_bounds(crs or WGS84_CRS)
-                    return Feature(
-                        type="Feature",
-                        bbox=bounds,
-                        geometry=bounds_to_geometry(bounds),
-                        properties=src.info(),
-                    )
+            with self.backend(
+                src_path,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                bounds = src.get_geographic_bounds(crs or WGS84_CRS)
+                return Feature(
+                    type="Feature",
+                    bbox=bounds,
+                    geometry=bounds_to_geometry(bounds),
+                    properties=src.info(),
+                )
 
     def tilejson(self) -> None:  # noqa: C901
         """Register a TileJSON endpoint with Xarray metadata."""
@@ -181,7 +176,6 @@ class XarrayTilerFactory(MosaicTilerFactory):
             ] = None,
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
-            env=Depends(self.environment_dependency),
         ):
             """Return a TileJSON document for the requested sources."""
             route_params: dict[str, Any] = {
@@ -204,26 +198,23 @@ class XarrayTilerFactory(MosaicTilerFactory):
             tiles_url += f"?{urlencode(qs)}"
 
             tms = self.supported_tms.get(tileMatrixSetId)
-            with rasterio.Env(**env):
-                with self.backend(
-                    src_path,
-                    tms=tms,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    info = src.info()
-                    return {
-                        "bounds": src.get_geographic_bounds(
-                            tms.rasterio_geographic_crs
-                        ),
-                        "minzoom": minzoom if minzoom is not None else src.minzoom,
-                        "maxzoom": maxzoom if maxzoom is not None else src.maxzoom,
-                        "tiles": [tiles_url],
-                        "raster_layers": self.get_renders(src),
-                        "band_descriptions": info.get("band_descriptions"),
-                        "data_type": info.get("dtype"),
-                        "minmax": info.get("minmax"),
-                    }
+            with self.backend(
+                src_path,
+                tms=tms,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                info = src.info()
+                return {
+                    "bounds": src.get_geographic_bounds(tms.rasterio_geographic_crs),
+                    "minzoom": minzoom if minzoom is not None else src.minzoom,
+                    "maxzoom": maxzoom if maxzoom is not None else src.maxzoom,
+                    "tiles": [tiles_url],
+                    "raster_layers": self.get_renders(src),
+                    "band_descriptions": info.get("band_descriptions"),
+                    "data_type": info.get("dtype"),
+                    "minmax": info.get("minmax"),
+                }
 
     def point(self) -> None:
         """Register a strategy-composited Xarray point endpoint."""
@@ -244,24 +235,22 @@ class XarrayTilerFactory(MosaicTilerFactory):
             layer_params=Depends(self.layer_dependency),
             dataset_params=Depends(self.dataset_dependency),
             pixel_selection=Depends(self.pixel_selection_dependency),
-            env=Depends(self.environment_dependency),
         ):
             """Return one point response using the requested mosaic strategy."""
-            with rasterio.Env(**env):
-                with self.backend(
-                    src_path,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    point_data, _ = src.point(
-                        lon,
-                        lat,
-                        coord_crs=coord_crs or WGS84_CRS,
-                        pixel_selection=pixel_selection,
-                        threads=MOSAIC_THREADS,
-                        **layer_params.as_dict(),
-                        **dataset_params.as_dict(),
-                    )
+            with self.backend(
+                src_path,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                point_data, _ = src.point(
+                    lon,
+                    lat,
+                    coord_crs=coord_crs or WGS84_CRS,
+                    pixel_selection=pixel_selection,
+                    threads=MOSAIC_THREADS,
+                    **layer_params.as_dict(),
+                    **dataset_params.as_dict(),
+                )
             return {
                 "coordinates": [lon, lat],
                 "values": point_data.array.tolist(),
@@ -302,7 +291,6 @@ class XarrayTilerFactory(MosaicTilerFactory):
             post_process=Depends(self.process_dependency),
             stats_params=Depends(self.stats_dependency),
             histogram_params=Depends(self.histogram_dependency),
-            env=Depends(self.environment_dependency),
         ):
             """Calculate statistics from composited feature pixels."""
             collection = (
@@ -310,38 +298,37 @@ class XarrayTilerFactory(MosaicTilerFactory):
                 if isinstance(geojson, Feature)
                 else geojson
             )
-            with rasterio.Env(**env):
-                with self.backend(
-                    src_path,
-                    reader=self.dataset_reader,
-                    reader_options=reader_params.as_dict(),
-                ) as src:
-                    for feature in collection.features:
-                        shape = feature.model_dump(exclude_none=True)
-                        image, _ = src.feature(
-                            shape,
-                            shape_crs=coord_crs or WGS84_CRS,
-                            dst_crs=dst_crs,
-                            align_bounds_with_dataset=True,
-                            pixel_selection=pixel_selection,
-                            threads=MOSAIC_THREADS,
-                            **layer_params.as_dict(),
-                            **dataset_params.as_dict(),
-                            **image_params.as_dict(),
-                        )
-                        coverage = image.get_coverage_array(
-                            shape,
-                            shape_crs=coord_crs or WGS84_CRS,
-                            cover_scale=cover_scale,
-                        )
-                        if post_process:
-                            image = post_process(image)
-                        feature.properties = feature.properties or {}
-                        feature.properties["statistics"] = image.statistics(
-                            **stats_params.as_dict(),
-                            hist_options=histogram_params.as_dict(),
-                            coverage=coverage,
-                        )
+            with self.backend(
+                src_path,
+                reader=self.dataset_reader,
+                reader_options=reader_params.as_dict(),
+            ) as src:
+                for feature in collection.features:
+                    shape = feature.model_dump(exclude_none=True)
+                    image, _ = src.feature(
+                        shape,
+                        shape_crs=coord_crs or WGS84_CRS,
+                        dst_crs=dst_crs,
+                        align_bounds_with_dataset=True,
+                        pixel_selection=pixel_selection,
+                        threads=MOSAIC_THREADS,
+                        **layer_params.as_dict(),
+                        **dataset_params.as_dict(),
+                        **image_params.as_dict(),
+                    )
+                    coverage = image.get_coverage_array(
+                        shape,
+                        shape_crs=coord_crs or WGS84_CRS,
+                        cover_scale=cover_scale,
+                    )
+                    if post_process:
+                        image = post_process(image)
+                    feature.properties = feature.properties or {}
+                    feature.properties["statistics"] = image.statistics(
+                        **stats_params.as_dict(),
+                        hist_options=histogram_params.as_dict(),
+                        coverage=coverage,
+                    )
             return (
                 collection.features[0] if isinstance(geojson, Feature) else collection
             )
@@ -356,27 +343,23 @@ class XarrayTilerFactory(MosaicTilerFactory):
             src_path=Depends(self.path_dependency),
             reader_params=Depends(self.reader_dependency),
             pixel_selection=Depends(self.pixel_selection_dependency),
-            env=Depends(self.environment_dependency),
         ):
             """Return a native or strategy-composited ten-bucket histogram."""
-            with rasterio.Env(**env):
-                if len(src_path) == 1:
-                    with self.dataset_reader(
-                        src_path[0], **reader_params.as_dict()
-                    ) as src:
-                        values = src.input.values[~np.isnan(src.input)]
-                else:
-                    with self.backend(
-                        src_path,
-                        reader=self.dataset_reader,
-                        reader_options=reader_params.as_dict(),
-                    ) as src:
-                        image, _ = src.part(
-                            src.bounds,
-                            pixel_selection=pixel_selection,
-                            threads=MOSAIC_THREADS,
-                        )
-                        values = image.array.compressed()
+            if len(src_path) == 1:
+                with self.dataset_reader(src_path[0], **reader_params.as_dict()) as src:
+                    values = src.input.values[~np.isnan(src.input)]
+            else:
+                with self.backend(
+                    src_path,
+                    reader=self.dataset_reader,
+                    reader_options=reader_params.as_dict(),
+                ) as src:
+                    image, _ = src.part(
+                        src.bounds,
+                        pixel_selection=pixel_selection,
+                        threads=MOSAIC_THREADS,
+                    )
+                    values = image.array.compressed()
             counts, edges = np.histogram(values, bins=10)
             return [
                 {"bucket": edges[index : index + 2].tolist(), "value": count}
