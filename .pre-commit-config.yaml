@@ -20,6 +20,7 @@ repos:
         language_version: python3.12
         exclude: tests/.*
         additional_dependencies:
+        - icechunk
         - types-attrs
         - types-redis
         - types-requests
