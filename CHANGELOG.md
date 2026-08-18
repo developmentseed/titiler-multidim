@@ -4,6 +4,13 @@
 
 * nothing
 
+## [0.8.0](https://github.com/developmentseed/titiler-multidim/compare/v0.7.2...v0.8.0) (2026-08-18)
+
+
+### Features
+
+* upgrade to titiler 2.2 ([#137](https://github.com/developmentseed/titiler-multidim/issues/137)) ([c17dfa7](https://github.com/developmentseed/titiler-multidim/commit/c17dfa7db43d26ae3e823181fe96227a29605f9e))
+
 ## [0.7.2](https://github.com/developmentseed/titiler-multidim/compare/v0.7.1...v0.7.2) (2026-05-11)
 
 
