@@ -36,8 +36,8 @@ jobs:
           # docs, tests, markdown, and other workflows. Anything else runs it.
           files=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
             --jq '.[] | .filename, (.previous_filename // empty)')
-          if echo "$files" | grep -q '^\.github/workflows/cdk-checks\.yml$'; then
-            # this workflow itself changed
+          if echo "$files" | grep -qE '^\.github/(workflows/cdk-checks\.yml$|actions/cdk-deploy/)'; then
+            # this workflow itself or the cdk-deploy action it uses changed
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif echo "$files" | grep -vE '^(docs/|tests/|\.github/workflows/)|\.md$' | grep -q .; then
             # at least one changed file is not on the safe list
