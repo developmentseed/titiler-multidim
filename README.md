@@ -90,7 +90,7 @@ uv run pytest tests/test_app.py::test_get_info
 
 * **Production deployments** are handled in the [NASA-IMPACT/veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repository.
 * **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository. Each deployment requests a tile from the public native MUR, virtual MUR, and virtual NLDAS Icechunk stores.
-* **CDK synth checks** can be triggered by applying the `run-cdk-checks` label to a pull request in this repository. This check only runs when the label is added, so if new commits are pushed later the label must be removed and added again.
+* **CDK synth checks** run automatically on pull requests, including pull requests from forks. The filter fails closed: only pull requests limited to documentation, tests, markdown, and unrelated workflows report the check as skipped (which still satisfies the required status check on `main`); anything else — including application source, which the CDK app imports and the Lambda image bundles — runs the full check. The check is fully anonymous: `cdk synth` runs with dummy configuration (no `VPC_ID`, so the stack is environment-agnostic, and a dummy reader role ARN that is parsed but never resolved) and no AWS credentials, validating the synthesized template and Lambda asset sizes without access to any AWS account.
 
 To run the same deployment smoke test manually:
 

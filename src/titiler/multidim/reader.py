@@ -17,10 +17,11 @@ from typing import (
 from urllib.parse import urlparse
 
 import attr
+import icechunk
+import obstore
 import xarray as xr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from pydantic_settings import BaseSettings
 from titiler.xarray.io import Reader, xarray_open_dataset
 
 from titiler.multidim.redis_pool import get_redis
@@ -35,31 +36,6 @@ from titiler.multidim.settings import (
 
 # raw option dicts (from a caller) or parsed models (from settings)
 ChunkAccessMapping = Mapping[str, Union[Mapping[str, Any], AnyChunkAccess]]
-
-try:
-    import icechunk
-except ImportError:  # pragma: nocover
-    icechunk = None  # type: ignore
-
-try:
-    import fsspec
-except ImportError:  # pragma: nocover
-    fsspec = None  # type: ignore
-
-try:
-    import obstore
-except ImportError:  # pragma: nocover
-    obstore = None  # type: ignore
-
-try:
-    import h5netcdf
-except ImportError:  # pragma: nocover
-    h5netcdf = None  # type: ignore
-
-try:
-    import zarr
-except ImportError:  # pragma: nocover
-    zarr = None  # type: ignore
 
 api_settings = ApiSettings()
 cache_client = get_redis()
@@ -111,13 +87,11 @@ def build_virtual_chunk_access(
 
 def opener_icechunk(
     src_path: str,
-    group: Optional[Any] = None,
+    group: Optional[str] = None,
     decode_times: bool = True,
     authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
-    if icechunk is None:
-        raise ImportError("'icechunk' must be installed to read icechunk repositories")
     credentials = build_virtual_chunk_access(authorize_virtual_chunk_access)
 
     # TODO: For future opener development. This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
@@ -187,28 +161,22 @@ def identify_storage_backend(src_path: str) -> str:
             f"Storage backend identification for protocol {protocol} is not implemented"
         )
 
-    is_dir = _is_dir(store)
-    if not is_dir:
+    if not _is_dir(store):
         # assume this is a file, and detect the format based on the file extension
         _, ext = os.path.splitext(parsed.path)
         if ext in [".nc", ".nc4"]:
-            format = "h5netcdf"
-        else:
-            raise NotImplementedError(
-                f"File format identification for extension {ext} is not implemented"
-            )
-    else:
-        has_manifests = _is_dir(store, "manifests")
-        if has_manifests:
-            format = "icechunk"
-        else:
-            format = "zarr"
-    return format
+            return "h5netcdf"
+        raise NotImplementedError(
+            f"File format identification for extension {ext} is not implemented"
+        )
+    if _is_dir(store, "manifests"):
+        return "icechunk"
+    return "zarr"
 
 
 def guess_opener(
     src_path: str,
-    group: Optional[Any] = None,
+    group: Optional[str] = None,
     decode_times: bool = True,
     authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
     **kwargs: Any,
@@ -236,18 +204,22 @@ def guess_opener(
             decode_times=decode_times,
             authorize_virtual_chunk_access=authorize_virtual_chunk_access,
         )
-    else:
-        # For zarr, h5netcdf, or other formats, use the standard xarray opener
-        return xarray_open_dataset(
-            src_path, group=group, decode_times=decode_times, **kwargs
-        )
+    # For zarr, h5netcdf, or other formats, use the standard xarray opener
+    return xarray_open_dataset(
+        src_path, group=group, decode_times=decode_times, **kwargs
+    )
 
 
-def _inject_settings(
-    options: Dict[str, Any], settings: BaseSettings, field: str
-) -> Dict[str, Any]:
-    if field not in options:
-        options[field] = api_settings.authorized_chunk_access
+def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
+    """Default the virtual chunk authorization to the service-wide setting.
+
+    Returns a new dict, copying the settings value, so neither the caller's
+    dict nor the process-wide authorization config is aliased into a reader.
+    """
+    options = dict(options)
+    options.setdefault(
+        "authorize_virtual_chunk_access", dict(api_settings.authorized_chunk_access)
+    )
     return options
 
 
@@ -257,9 +229,7 @@ class XarrayReader(Reader):
 
     def __attrs_post_init__(self):
         """Configure the cached opener before the parent reads the dataset."""
-        self.opener_options = _inject_settings(
-            self.opener_options, api_settings, "authorize_virtual_chunk_access"
-        )
+        self.opener_options = _inject_settings(self.opener_options)
         self.opener = self._open_cached
         super().__attrs_post_init__()
 
@@ -285,15 +255,12 @@ class XarrayReader(Reader):
     def list_variables(
         cls,
         src_path: str,
-        group: Optional[Any] = None,
+        group: Optional[str] = None,
         decode_times: bool = True,
         opener_options: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """List available variable in a dataset."""
-        opener_options = opener_options or {}
-        opener_options = _inject_settings(
-            opener_options, api_settings, "authorize_virtual_chunk_access"
-        )
+        opener_options = _inject_settings(opener_options or {})
 
         with guess_opener(
             src_path,
