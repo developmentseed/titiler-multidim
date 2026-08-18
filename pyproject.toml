@@ -33,7 +33,7 @@ dependencies = [
     "fsspec",
     "h5netcdf",
     "h5py>=3.16.0",
-    "icechunk>=2.1",
+    "icechunk>=2.1,<3",
     "numpy",
     "obstore>=0.9.4",
     "pydantic-settings~=2.14",
@@ -131,6 +131,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/test_app.py" = ["D1"]
+"tests/test_reader_credentials.py" = ["D1"]
 "tests/fixtures/generate_test_zarr.py" = ["D1"]
 "tests/fixtures/generate_test_reference.py" = ["D1"]
 
