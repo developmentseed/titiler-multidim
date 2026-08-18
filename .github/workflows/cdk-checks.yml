@@ -1,44 +1,69 @@
 name: CDK Checks
 
+# CDK synth check, run outside the `dev` environment to not
+# have any access to variables/secrets. This enables it to
+# be run from forks.
+#
+# "CDK checks" is a required status check on main, so the path
+# filtering happens in the `changes` job rather than in the trigger.
+
 on:
   pull_request:
-    types: [labeled]
 
 permissions: {}
 
+concurrency:
+  group: cdk-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: Detect infrastructure changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - name: Decide whether the synth can be skipped
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Skip the synth only when every changed file is safe to ignore:
+          # docs, tests, markdown, and other workflows. Anything else runs it.
+          files=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          if echo "$files" | grep -qE '^\.github/(workflows/cdk-checks\.yml$|actions/cdk-deploy/)'; then
+            # this workflow itself or the cdk-deploy action it uses changed
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif echo "$files" | grep -vE '^(docs/|tests/|\.github/workflows/)|\.md$' | grep -q .; then
+            # at least one changed file is not on the safe list
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   cdk-checks:
     name: CDK checks
-    if: contains(github.event.pull_request.labels.*.name, 'run-cdk-checks')
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
-    environment: dev
     permissions:
-      id-token: write
       contents: read
     env:
       UV_PYTHON: 3.12
-      CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
-      CDK_DEFAULT_REGION: ${{ vars.CDK_DEFAULT_REGION }}
-      STAGE: ${{ vars.STAGE }}
-      VPC_ID: ${{ vars.VPC_ID }}
+      STAGE: ci
       TITILER_MULTIDIM_PYTHONWARNINGS: ignore
       TITILER_MULTIDIM_DEBUG: true
-      TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
-    defaults:
-      run:
-        working-directory: infrastructure/aws
+      # dummy value; synth only parses it
+      TITILER_MULTIDIM_READER_ROLE_ARN: arn:aws:iam::123456789012:role/ci-dummy-reader
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@acca2b1b2070338fb9fd1ca27ecee81d687e58e5 # v6.1.2
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          role-session-name: github-actions-pr
-          aws-region: ${{ vars.CDK_DEFAULT_REGION }}
 
       - uses: ./.github/actions/cdk-deploy
         with:
