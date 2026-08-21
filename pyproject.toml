@@ -44,6 +44,8 @@ dependencies = [
     "s3fs",
     "xarray>=2025.10.1",
     "zarr>=3.2.0",
+    "titiler-mosaic==2.2.1",
+    "gribberish[zarr]>=1.7.0",
 ]
 
 [project.optional-dependencies]
