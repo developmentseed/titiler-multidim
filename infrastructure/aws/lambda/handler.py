@@ -141,7 +141,6 @@ if "AWS_EXECUTION_ENV" in os.environ and api_settings.telemetry_enabled:
     from opentelemetry import propagate, trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.instrumentation.logging import LoggingInstrumentor
     from opentelemetry.propagators.aws import AwsXRayPropagator
     from opentelemetry.sdk.extension.aws.trace import AwsXRayIdGenerator
@@ -262,7 +261,7 @@ if "AWS_EXECUTION_ENV" in os.environ and api_settings.telemetry_enabled:
     propagate.set_global_textmap(_LambdaXRayPropagator())
 
     LoggingInstrumentor().instrument(set_logging_format=True)
-    HTTPXClientInstrumentor().instrument()
+    # HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
 
 # ── SnapStart pre-warming ──────────────────────────────────────────────────────
