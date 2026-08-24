@@ -7,6 +7,8 @@ from typing import Annotated, Any
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from titiler.multidim.chunk_access import AnyChunkAccess, parse_chunk_access
+
 
 class ApiSettings(BaseSettings):
     """FastAPI application settings."""
@@ -20,7 +22,7 @@ class ApiSettings(BaseSettings):
     telemetry_enabled: bool = False
     cache_host: str = "127.0.0.1"
     enable_cache: bool = True
-    authorized_chunk_access: dict[str, dict[str, Any]] = {}
+    authorized_chunk_access: dict[str, AnyChunkAccess] = {}
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_MULTIDIM_", env_file=".env", extra="ignore"
@@ -38,13 +40,13 @@ class ApiSettings(BaseSettings):
 
     @field_validator("authorized_chunk_access", mode="before")
     def parse_authorized_chunk_access(cls, v):
-        """Parse authorized_chunk_access from JSON string or dict."""
+        """Parse authorized_chunk_access from JSON string or dict into models."""
         if isinstance(v, str):
             try:
-                return json.loads(v)
+                v = json.loads(v)
             except json.JSONDecodeError as e:
                 raise ValueError(f"Invalid JSON in authorized_chunk_access: {e}") from e
-        return v or {}
+        return parse_chunk_access(v)
 
 
 class StackSettings(BaseSettings):

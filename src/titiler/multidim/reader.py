@@ -1,8 +1,15 @@
 """XarrayReader"""
 
+from __future__ import annotations
+
 import os
 import pickle
-from typing import Any, Dict, List, Optional
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 from urllib.parse import urlparse
 
 import attr
@@ -13,6 +20,7 @@ from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
 from titiler.xarray.io import Reader, xarray_open_dataset
 
+from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
@@ -24,14 +32,14 @@ def opener_icechunk(
     src_path: str,
     group: Optional[str] = None,
     decode_times: bool = True,
-    authorize_virtual_chunk_access: Optional[Dict[str, Dict[str, Any]]] = None,
+    authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
+    credentials = build_virtual_chunk_access(authorize_virtual_chunk_access)
+
     # TODO: For future opener development. This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
-
-    authorize_virtual_chunk_access = authorize_virtual_chunk_access or {}
 
     if protocol == "file":
         storage = icechunk.local_filesystem_storage(src_path)
@@ -47,22 +55,9 @@ def opener_icechunk(
         raise NotImplementedError(
             f"icechunk storage for protocol {protocol} is not implemented"
         )
-    # TODO: I think it would be more elegant to get the virtual chunk containers and
-    # compare against authorized containers from settings but that might be slowing things down. Leaving this for later.
-
-    vchunk_creds = (
-        icechunk.containers_credentials(
-            {
-                prefix: icechunk.s3_credentials(**auth_kwargs)
-                for prefix, auth_kwargs in authorize_virtual_chunk_access.items()
-            }
-        )
-        if authorize_virtual_chunk_access
-        else None
-    )
 
     repo = icechunk.Repository.open(
-        storage=storage, authorize_virtual_chunk_access=vchunk_creds
+        storage=storage, authorize_virtual_chunk_access=credentials
     )
     session = repo.readonly_session("main")
     store = session.store
@@ -126,7 +121,7 @@ def guess_opener(
     src_path: str,
     group: Optional[str] = None,
     decode_times: bool = True,
-    authorize_virtual_chunk_access: Optional[Dict[str, Dict[str, Any]]] = None,
+    authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
     **kwargs: Any,
 ) -> xr.Dataset:
     """Guess the storage backend and return an xarray Dataset.
