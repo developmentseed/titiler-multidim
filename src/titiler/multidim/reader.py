@@ -5,14 +5,10 @@ from __future__ import annotations
 import os
 import pickle
 from typing import (
-    TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     List,
-    Mapping,
     Optional,
-    Union,
 )
 from urllib.parse import urlparse
 
@@ -24,65 +20,12 @@ from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
 from titiler.xarray.io import Reader, xarray_open_dataset
 
+from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
 from titiler.multidim.redis_pool import get_redis
-from titiler.multidim.settings import (
-    AnyChunkAccess,
-    ApiSettings,
-    AzureChunkAccess,
-    GcsChunkAccess,
-    S3ChunkAccess,
-    parse_chunk_access,
-)
-
-# raw option dicts (from a caller) or parsed models (from settings)
-ChunkAccessMapping = Mapping[str, Union[Mapping[str, Any], AnyChunkAccess]]
+from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
 cache_client = get_redis()
-
-
-if TYPE_CHECKING:
-    # the input union of icechunk.containers_credentials, which exports no
-    # alias for it (icechunk.AnyCredential is its narrower OUTPUT union)
-    _ContainerCredential = Union[
-        icechunk.AnyS3Credential,
-        icechunk.AnyGcsCredential,
-        icechunk.AnyAzureCredential,
-    ]
-
-
-def build_virtual_chunk_access(
-    authorize_virtual_chunk_access: Optional[ChunkAccessMapping],
-) -> Optional[Dict[str, Optional[icechunk.AnyCredential]]]:
-    """Translate virtual chunk access settings into icechunk credentials.
-
-    Entries are parsed into per-scheme option models by parse_chunk_access
-    (which also rejects file://, unknown schemes, and unrecognized options),
-    then the set fields of each entry are passed to the matching icechunk
-    credential builder (e.g. icechunk.s3_credentials).
-
-    Args:
-        authorize_virtual_chunk_access: Mapping of container URL prefix to
-            access options (raw dicts or parsed models).
-
-    Returns:
-        The mapping for Repository.open(authorize_virtual_chunk_access), or
-        None when no entries are configured.
-    """
-    entries = parse_chunk_access(authorize_virtual_chunk_access)
-    if not entries:
-        return None
-
-    credential_builders: Dict[type, Callable[..., _ContainerCredential]] = {
-        S3ChunkAccess: icechunk.s3_credentials,
-        GcsChunkAccess: icechunk.gcs_credentials,
-        AzureChunkAccess: icechunk.azure_credentials,
-    }
-    credentials: Dict[str, _ContainerCredential] = {}
-    for prefix, options in entries.items():
-        builder = credential_builders[type(options)]
-        credentials[prefix] = builder(**options.model_dump(exclude_unset=True))
-    return icechunk.containers_credentials(credentials)
 
 
 def opener_icechunk(

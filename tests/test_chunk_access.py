@@ -1,4 +1,4 @@
-"""Unit tests for virtual chunk access handling in titiler.multidim.reader."""
+"""Unit tests for virtual chunk access handling in titiler.multidim.chunk_access."""
 
 import inspect
 import json
@@ -7,13 +7,13 @@ import icechunk
 import pytest
 from pydantic import ValidationError
 
-from titiler.multidim.reader import build_virtual_chunk_access
-from titiler.multidim.settings import (
-    ApiSettings,
+from titiler.multidim.chunk_access import (
     AzureChunkAccess,
     GcsChunkAccess,
     S3ChunkAccess,
+    build_virtual_chunk_access,
 )
+from titiler.multidim.settings import ApiSettings
 
 
 def test_empty_mapping_returns_no_credentials():
