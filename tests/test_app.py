@@ -254,3 +254,36 @@ def test_sel_nearest_netcdf(app):
     params["sel"] = "time=nearest::2020-01-06"
     response = app.get("/info", params=params)
     assert response.status_code == 200
+
+
+def test_earthdata_exception_handlers_registered(app):
+    from earthaccess_auth.exceptions import (
+        LoginStrategyUnavailable,
+        S3CredentialsRequestFailure,
+    )
+
+    from titiler.multidim.main import app as fastapi_app
+
+    assert S3CredentialsRequestFailure in fastapi_app.exception_handlers
+    assert LoginStrategyUnavailable in fastapi_app.exception_handlers
+
+
+def test_earthdata_auth_failure_returns_403(app, monkeypatch):
+    """A typed EULA rejection raised by the opener surfaces as HTTP 403.
+
+    The unit tests in test_chunk_access.py verify the typed
+    S3CredentialsRequestFailure escapes in Python (not wrapped by icechunk's
+    Rust layer); this test verifies the app maps it to 403 with the EULA
+    message intact.
+    """
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    def raise_eula(*args, **kwargs):
+        raise S3CredentialsRequestFailure(
+            "EULA not accepted: https://urs.earthdata.nasa.gov/approve"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_eula)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 403
+    assert "EULA" in response.text

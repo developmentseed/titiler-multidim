@@ -3,6 +3,10 @@
 import logging
 
 import zarr
+from earthaccess_auth.exceptions import (
+    LoginStrategyUnavailable,
+    S3CredentialsRequestFailure,
+)
 from fastapi import Depends, FastAPI
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
@@ -58,6 +62,11 @@ app.include_router(
 
 error_codes = {
     zarr.errors.GroupNotFoundError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    # EULA not accepted / DAAC rejected the credential request: the
+    # exception message carries the EULA URLs, so surface it to the caller
+    S3CredentialsRequestFailure: status.HTTP_403_FORBIDDEN,
+    # service misconfiguration (no EDL identity available)
+    LoginStrategyUnavailable: status.HTTP_500_INTERNAL_SERVER_ERROR,
 }
 add_exception_handlers(app, error_codes)
 add_exception_handlers(app, DEFAULT_STATUS_CODES)

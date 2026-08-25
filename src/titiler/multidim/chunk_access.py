@@ -40,13 +40,20 @@ class _CloudChunkAccess(BaseModel):
         static_fields = {
             name
             for name in self.model_fields_set
-            if name not in ("anonymous", "from_env") and getattr(self, name) is not None
+            if name not in ("anonymous", "from_env", "earthdata")
+            and getattr(self, name) is not None
         }
-        if getattr(self, "anonymous", None) or self.from_env or static_fields:
+        if (
+            getattr(self, "anonymous", None)
+            or self.from_env
+            or getattr(self, "earthdata", None)
+            or static_fields
+        ):
             return self
         raise ValueError(
             "credential use is opt-in: set 'from_env': true, 'anonymous': true "
-            "(s3/gcs only), or explicit credential fields"
+            "(s3/gcs only), 'earthdata': true (s3 only), or explicit credential "
+            "fields"
         )
 
 
@@ -57,12 +64,71 @@ class S3ChunkAccess(_CloudChunkAccess):
     access_key_id: str | None = None
     secret_access_key: str | None = None
     session_token: str | None = None
+    earthdata: bool | None = None
+    """Fetch EDL-derived refreshable credentials for the entry's bucket via
+    earthaccess-auth's CMR bucket registry (requires the bucket to be
+    registered there and an EDL identity: EARTHDATA_TOKEN or netrc)."""
 
-    def to_credential(self) -> icechunk.AnyS3Credential:
+    @model_validator(mode="after")
+    def _earthdata_is_exclusive(self) -> "S3ChunkAccess":
+        if self.earthdata:
+            others = {
+                name
+                for name in self.model_fields_set
+                if name != "earthdata" and getattr(self, name) is not None
+            }
+            if others:
+                raise ValueError(
+                    "'earthdata': true cannot be combined with other access "
+                    f"options (got: {', '.join(sorted(others))})"
+                )
+        return self
+
+    def to_credential(self, prefix: str) -> icechunk.AnyS3Credential:
         """Build the icechunk credential from the explicitly-set fields."""
+        if self.earthdata:
+            # both imports lazy: earthaccess-auth and icechunk are absent
+            # in the CDK deployment environment
+            from earthaccess_auth.adapters.icechunk import (
+                earthdata_s3_credentials,
+            )
+            from earthaccess_auth.daac import resolve_bucket
+
+            from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+            info = resolve_bucket(prefix)
+            if info is None:
+                # defensive backstop: parse_chunk_access already rejects an
+                # unregistered-bucket 'earthdata': true entry at parse time,
+                # so this should be practically unreachable in normal
+                # service operation; kept in case to_credential is ever
+                # called directly on a model built without going through
+                # parse_chunk_access
+                raise ValueError(
+                    f"virtual chunk entry {prefix!r} sets 'earthdata': true "
+                    "but its bucket is not in the CMR-derived bucket registry"
+                )
+            ensure_earthdata_credentials()
+
+            from earthaccess_auth.credentials import default_manager
+
+            # Prime the shared per-endpoint credential cache in Python
+            # before icechunk's Rust layer ever invokes the refreshable
+            # callable: Rust re-wraps whatever the callable raises as a
+            # generic storage error, losing the typed
+            # S3CredentialsRequestFailure (EULA URLs) /
+            # LoginStrategyUnavailable that main.py maps to HTTP 403/500.
+            # The manager caches per endpoint, so this adds no extra EDL
+            # round trips on subsequent opens.
+            default_manager().get_credentials(info.endpoint)
+
+            return earthdata_s3_credentials(info.endpoint)
+
         import icechunk
 
-        return icechunk.s3_credentials(**self.model_dump(exclude_unset=True))
+        return icechunk.s3_credentials(
+            **self.model_dump(exclude_unset=True, exclude={"earthdata"})
+        )
 
 
 class GcsChunkAccess(_CloudChunkAccess):
@@ -74,8 +140,9 @@ class GcsChunkAccess(_CloudChunkAccess):
     application_credentials: str | None = None
     bearer_token: str | None = None
 
-    def to_credential(self) -> icechunk.AnyGcsCredential:
+    def to_credential(self, prefix: str) -> icechunk.AnyGcsCredential:
         """Build the icechunk credential from the explicitly-set fields."""
+        del prefix  # uniform signature; only s3 entries resolve their prefix
         import icechunk
 
         return icechunk.gcs_credentials(**self.model_dump(exclude_unset=True))
@@ -92,8 +159,9 @@ class AzureChunkAccess(_CloudChunkAccess):
     sas_token: str | None = None
     bearer_token: str | None = None
 
-    def to_credential(self) -> icechunk.AnyAzureCredential:
+    def to_credential(self, prefix: str) -> icechunk.AnyAzureCredential:
         """Build the icechunk credential from the explicitly-set fields."""
+        del prefix  # uniform signature; only s3 entries resolve their prefix
         import icechunk
 
         return icechunk.azure_credentials(**self.model_dump(exclude_unset=True))
@@ -151,14 +219,31 @@ def parse_chunk_access(
                     f"virtual chunk entry {prefix!r} expects {model.__name__}, "
                     f"got {type(options).__name__}"
                 )
-            parsed[prefix] = options
-            continue
-        try:
-            parsed[prefix] = model.model_validate(options)
-        except ValueError as e:
-            raise ValueError(
-                f"invalid options for virtual chunk entry {prefix!r}: {e}"
-            ) from e
+            entry = options
+        else:
+            try:
+                entry = model.model_validate(options)
+            except ValueError as e:
+                raise ValueError(
+                    f"invalid options for virtual chunk entry {prefix!r}: {e}"
+                ) from e
+
+        if isinstance(entry, S3ChunkAccess) and entry.earthdata:
+            # fail fast at parse time (README: "validated at application
+            # startup") rather than per-request in to_credential; import
+            # lazy, and only reached when an earthdata entry actually
+            # exists, so this module stays importable without
+            # earthaccess-auth (CDK deployment env) when no earthdata
+            # entries are configured
+            from earthaccess_auth.daac import resolve_bucket
+
+            if resolve_bucket(prefix) is None:
+                raise ValueError(
+                    f"virtual chunk entry {prefix!r} sets 'earthdata': true "
+                    "but its bucket is not in the CMR-derived bucket registry"
+                )
+
+        parsed[prefix] = entry
     return parsed
 
 
@@ -185,5 +270,5 @@ def build_virtual_chunk_access(
     if not entries:
         return None
     return icechunk.containers_credentials(
-        {prefix: options.to_credential() for prefix, options in entries.items()}
+        {prefix: options.to_credential(prefix) for prefix, options in entries.items()}
     )

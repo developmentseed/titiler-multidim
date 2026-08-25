@@ -28,6 +28,7 @@ dependencies = [
     "aiobotocore>=2.24.0",
     "aiohttp",
     "boto3>=1.39.0",
+    "earthaccess-auth>=0.2.0",
     "cftime",
     "fastapi",
     "fsspec",
@@ -132,6 +133,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/test_app.py" = ["D1"]
 "tests/test_chunk_access.py" = ["D1"]
+"tests/test_settings.py" = ["D1"]
+"tests/test_earthdata.py" = ["D1"]
 "tests/fixtures/generate_test_zarr.py" = ["D1"]
 "tests/fixtures/generate_test_reference.py" = ["D1"]
 

@@ -23,6 +23,7 @@ class ApiSettings(BaseSettings):
     cache_host: str = "127.0.0.1"
     enable_cache: bool = True
     authorized_chunk_access: dict[str, AnyChunkAccess] = {}
+    earthdata_secret_arn: str | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_MULTIDIM_", env_file=".env", extra="ignore"
@@ -94,6 +95,17 @@ class AppSettings(BaseSettings):
         None,
         description="JSON string for authorizing virtual chunk access in icechunk datasets",
     )
+    earthdata_secret_arn: str | None = Field(
+        None,
+        description=(
+            "ARN of a Secrets Manager secret holding EDL credentials (a "
+            "plain token string, or JSON with EARTHDATA_TOKEN or "
+            "EARTHDATA_USERNAME/EARTHDATA_PASSWORD). Resolved lazily at "
+            "runtime, so rotating the secret needs no redeploy. The "
+            "externally-managed reader role must allow "
+            "secretsmanager:GetSecretValue on this ARN."
+        ),
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", extra="ignore", env_prefix="TITILER_MULTIDIM_"
@@ -104,4 +116,8 @@ class AppSettings(BaseSettings):
         if self.authorized_chunk_access:
             self.additional_env["TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS"] = (
                 self.authorized_chunk_access
+            )
+        if self.earthdata_secret_arn:
+            self.additional_env["TITILER_MULTIDIM_EARTHDATA_SECRET_ARN"] = (
+                self.earthdata_secret_arn
             )

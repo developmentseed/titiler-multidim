@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import pickle
 from typing import (
@@ -18,6 +20,7 @@ import obstore
 import xarray as xr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
+from pydantic import BaseModel
 from titiler.xarray.io import Reader, xarray_open_dataset
 
 from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
@@ -44,12 +47,14 @@ def opener_icechunk(
     if protocol == "file":
         storage = icechunk.local_filesystem_storage(src_path)
     elif protocol == "s3":
+        bucket = parsed.netloc
+        prefix = parsed.path.lstrip(
+            "/"
+        )  # remove leading slash, this is an annoying mismatch between icechunk and urlparse
         storage = icechunk.s3_storage(
-            bucket=parsed.netloc,
-            prefix=parsed.path.lstrip(
-                "/"
-            ),  # remove leading slash, this is an annoying mismatch between icechunk and urlparse
-            from_env=True,  # we always assume that we can get credentials from env vars or IAM role for the store itself?
+            bucket=bucket,
+            prefix=prefix,
+            from_env=True,  # the store itself always uses ambient credentials
         )
     else:
         raise NotImplementedError(
@@ -92,12 +97,10 @@ def identify_storage_backend(src_path: str) -> str:
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
-        session = Session()
-        credential_provider = Boto3CredentialProvider(session)
         store = obstore.store.S3Store(
             bucket=parsed.netloc,
             prefix=parsed.path.lstrip("/"),
-            credential_provider=credential_provider,
+            credential_provider=Boto3CredentialProvider(Session()),
         )
     else:
         raise NotImplementedError(
@@ -131,7 +134,7 @@ def guess_opener(
         group: Optional group/subgroup to open
         decode_times: Whether to decode time coordinates
         authorize_virtual_chunk_access: Authorization config for icechunk virtual chunks
-        **kwargs: Additional arguments to pass to the opener
+        **kwargs: Additional arguments to pass to the opener.
 
     Returns:
         xarray.Dataset
@@ -166,6 +169,34 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
+def _entry_options(entry: Any) -> Dict[str, Any]:
+    """Normalize a chunk-access entry (raw dict or parsed model) to a dict."""
+    if isinstance(entry, BaseModel):
+        return entry.model_dump(exclude_unset=True)
+    return dict(entry)
+
+
+def _has_earthdata_entries(access: Optional[ChunkAccessMapping]) -> bool:
+    return any(
+        _entry_options(entry).get("earthdata") for entry in (access or {}).values()
+    )
+
+
+def _access_fingerprint(access: Optional[ChunkAccessMapping]) -> str:
+    """Stable digest of the authorization config for the dataset cache key.
+
+    Datasets are cached with their credentials/authorization baked in
+    (icechunk credential callables, s3fs options), so a config change must
+    miss the cache instead of serving data authorized under the old config.
+    """
+    canonical = json.dumps(
+        {prefix: _entry_options(entry) for prefix, entry in (access or {}).items()},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with redis cache"""
@@ -178,8 +209,21 @@ class XarrayReader(Reader):
 
     def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
         """Open a dataset, reusing its Redis cache entry when enabled."""
+        access = kwargs.get("authorize_virtual_chunk_access")
+        if _has_earthdata_entries(access):
+            # a dataset unpickled from the shared cache carries a
+            # refreshable credential callable that resolves through
+            # default_manager() in *this* process, which needs the EDL
+            # identity exported here — the opener path below does this via
+            # to_credential, but a cache hit never runs it
+            from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+            ensure_earthdata_credentials()
+
         cache_key = (
-            f"{src_path}_group:{kwargs.get('group')}_time:{kwargs.get('decode_times')}"
+            f"{src_path}_group:{kwargs.get('group')}"
+            f"_time:{kwargs.get('decode_times')}"
+            f"_access:{_access_fingerprint(access)}"
         )
 
         if api_settings.enable_cache:

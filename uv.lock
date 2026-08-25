@@ -16,6 +16,9 @@ resolution-markers = [
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P1W"
 
+[options.exclude-newer-package]
+earthaccess-auth = "2026-08-26T00:00:00Z"
+
 [[package]]
 name = "affine"
 version = "2.4.0"
@@ -362,7 +365,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -916,6 +919,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/25/71/80cc718ff6d7abfbabacb1f57aaa42e9c1552bfdd01e64ddd704e4a03638/donfig-0.8.1.post1.tar.gz", hash = "sha256:3bef3413a4c1c601b585e8d297256d0c1470ea012afa6e8461dc28bfb7c23f52", size = 19506, upload-time = "2024-05-23T14:14:31.513Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/d5/c5db1ea3394c6e1732fb3286b3bd878b59507a8f77d32a2cebda7d7b7cd4/donfig-0.8.1.post1-py3-none-any.whl", hash = "sha256:2a3175ce74a06109ff9307d90a230f81215cbac9a751f4d1c6194644b8204f9d", size = 21592, upload-time = "2024-05-23T14:13:55.283Z" },
+]
+
+[[package]]
+name = "earthaccess-auth"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "tinynetrc" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/af/cb/b59032a4a4f69fa204ccbef79581ea9f72ad1df381769963e7e4ea81f7e2/earthaccess_auth-0.2.0.tar.gz", hash = "sha256:c09a389d42cff335ca0441974058d5ebbea435418d12ffbadef5c40de0ad2f9c", size = 162083, upload-time = "2026-08-25T01:11:07.35Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/4c/677c0ed9420ff1f2da13edfe99d62db77eabf5e53a08abf0597ea34d0190/earthaccess_auth-0.2.0-py3-none-any.whl", hash = "sha256:def389d5990c4ff9ddadc15b72789f2a987b50696954fc0bc950d3bfadc89b4a", size = 21700, upload-time = "2026-08-25T01:11:06.074Z" },
 ]
 
 [[package]]
@@ -2354,7 +2370,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -3290,6 +3306,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tinynetrc"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/8f/6df2414a8f38b08836726986437f7612983f25c6dc3c55c66f4850a3d795/tinynetrc-1.3.1.tar.gz", hash = "sha256:2b9a256d2e630643b8f0985f5e826ccf0bf3716e07e596a4f67feab363d254df", size = 5484, upload-time = "2021-08-15T18:24:13.1Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/0b/633691d7cea5129afa622869485d1985b038df1d3597a35848731d106762/tinynetrc-1.3.1-py2.py3-none-any.whl", hash = "sha256:46c7820e5f49c9434d2c4cd74de8a06edbbd45e63a8a2980a90b8a43db8facf7", size = 3949, upload-time = "2021-08-15T18:24:11.744Z" },
+]
+
+[[package]]
 name = "titiler-core"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3318,6 +3343,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "cftime" },
+    { name = "earthaccess-auth" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "h5netcdf" },
@@ -3389,6 +3415,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "boto3", specifier = ">=1.39.0" },
     { name = "cftime" },
+    { name = "earthaccess-auth", specifier = ">=0.2.0" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "h5netcdf" },

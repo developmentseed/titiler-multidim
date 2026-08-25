@@ -2,6 +2,8 @@
 
 import inspect
 import json
+from datetime import datetime, timezone
+from unittest import mock
 
 import icechunk
 import pytest
@@ -12,6 +14,7 @@ from titiler.multidim.chunk_access import (
     GcsChunkAccess,
     S3ChunkAccess,
     build_virtual_chunk_access,
+    parse_chunk_access,
 )
 from titiler.multidim.settings import ApiSettings
 
@@ -143,9 +146,12 @@ def test_mixed_case_scheme_prefix_is_rejected():
 def test_model_fields_are_accepted_by_icechunk_builder(model, builder):
     # the chunk access models hand-mirror the JSON-expressible subset of the
     # icechunk credential builder signatures, so a rename or removal in a new
-    # icechunk release must fail here instead of at request time
+    # icechunk release must fail here instead of at request time.
+    # 'earthdata' is titiler's own routing flag, never forwarded to icechunk
+    # (to_credential excludes it from the model_dump it passes along), so it
+    # is exempt from this parity check.
     accepted = set(inspect.signature(builder).parameters)
-    missing = set(model.model_fields) - accepted
+    missing = set(model.model_fields) - accepted - {"earthdata"}
     assert not missing, (
         f"{model.__name__} fields not accepted by {builder.__name__}: {missing}"
     )
@@ -174,3 +180,133 @@ def test_settings_instantiated_at_import(monkeypatch):
     from titiler.multidim.settings import ApiSettings as CurrentApiSettings
 
     assert isinstance(main.api_settings, CurrentApiSettings)
+
+
+REGISTRY_PREFIX = "s3://podaac-ops-cumulus-protected/MUR/"
+PODAAC_ENDPOINT = "https://archive.podaac.earthdata.nasa.gov/s3credentials"
+
+
+def test_earthdata_satisfies_opt_in_validator():
+    access = S3ChunkAccess(earthdata=True)
+    assert access.earthdata is True
+
+
+def test_earthdata_false_alone_is_rejected():
+    with pytest.raises(ValueError, match="opt-in"):
+        S3ChunkAccess(earthdata=False)
+
+
+def test_earthdata_is_exclusive_with_other_modes():
+    with pytest.raises(ValueError, match="cannot be combined"):
+        S3ChunkAccess(earthdata=True, from_env=True)
+    with pytest.raises(ValueError, match="cannot be combined"):
+        S3ChunkAccess(earthdata=True, access_key_id="AKID")
+
+
+def test_parse_chunk_access_accepts_earthdata_entry():
+    parsed = parse_chunk_access({REGISTRY_PREFIX: {"earthdata": True}})
+    assert isinstance(parsed[REGISTRY_PREFIX], S3ChunkAccess)
+    assert parsed[REGISTRY_PREFIX].earthdata is True
+
+
+def test_earthdata_to_credential_uses_registry_endpoint(monkeypatch):
+    refreshable = mock.Mock(name="refreshable")
+    factory = mock.Mock(return_value=refreshable)
+    monkeypatch.setattr(
+        "earthaccess_auth.adapters.icechunk.earthdata_s3_credentials", factory
+    )
+    monkeypatch.setattr(
+        "earthaccess_auth.credentials.default_manager",
+        lambda: _PrimingStubManager(),
+    )
+    access = S3ChunkAccess(earthdata=True)
+    assert access.to_credential(REGISTRY_PREFIX) is refreshable
+    factory.assert_called_once_with(PODAAC_ENDPOINT)
+
+
+def test_parse_chunk_access_rejects_unregistered_earthdata_bucket():
+    # the primary layer: an explicit 'earthdata': true entry for a bucket
+    # outside the CMR-derived registry must fail fast at parse time (README:
+    # "validated at application startup"), not per-request in to_credential
+    with pytest.raises(
+        ValueError, match="not-a-real-bucket.*not in the CMR-derived bucket registry"
+    ):
+        parse_chunk_access({"s3://not-a-real-bucket/prefix/": {"earthdata": True}})
+
+
+def test_earthdata_to_credential_unknown_bucket_raises():
+    # defensive backstop: to_credential re-checks the registry itself, so it
+    # stays safe even when called directly (bypassing parse_chunk_access);
+    # in normal service operation this is practically unreachable, since
+    # parse_chunk_access above already rejects the entry first
+    access = S3ChunkAccess(earthdata=True)
+    with pytest.raises(ValueError, match="not in the CMR-derived bucket registry"):
+        access.to_credential("s3://not-a-real-bucket/prefix/")
+
+
+def _fake_earthdata_credentials() -> "icechunk.S3StaticCredentials":
+    # module-level (not a test-local closure) so icechunk's real
+    # s3_refreshable_credentials can pickle it, matching the picklable
+    # functools.partial callable earthaccess_auth builds in production
+    return icechunk.S3StaticCredentials(
+        access_key_id="AKID",
+        secret_access_key="SECRET",
+        session_token="TOKEN",
+        expires_after=datetime.now(timezone.utc),
+    )
+
+
+def test_earthdata_entry_builds_refreshable_credential(monkeypatch):
+    monkeypatch.setattr(
+        "earthaccess_auth.credentials.default_manager",
+        lambda: _PrimingStubManager(),
+    )
+    with mock.patch(
+        "earthaccess_auth.adapters.icechunk.get_credentials_callable",
+        return_value=_fake_earthdata_credentials,
+    ):
+        creds = build_virtual_chunk_access({REGISTRY_PREFIX: {"earthdata": True}})
+    assert creds is not None
+    assert REGISTRY_PREFIX in creds
+
+
+class _PrimingStubManager:
+    def __init__(self):
+        self.primed = []
+
+    def get_credentials(self, endpoint):
+        self.primed.append(endpoint)
+
+
+def test_earthdata_to_credential_primes_endpoint_in_python(monkeypatch):
+    """The first credential fetch must happen in Python, not inside
+    icechunk's Rust callback: Rust re-wraps typed exceptions as opaque
+    storage errors, losing the S3CredentialsRequestFailure (with EULA
+    URLs) that main.py maps to HTTP 403. The manager caches per endpoint,
+    so priming adds no extra EDL round trips."""
+    manager = _PrimingStubManager()
+    monkeypatch.setattr("earthaccess_auth.credentials.default_manager", lambda: manager)
+    refreshable = mock.Mock(name="refreshable")
+    monkeypatch.setattr(
+        "earthaccess_auth.adapters.icechunk.earthdata_s3_credentials",
+        mock.Mock(return_value=refreshable),
+    )
+    access = S3ChunkAccess(earthdata=True)
+    assert access.to_credential(REGISTRY_PREFIX) is refreshable
+    assert manager.primed == [PODAAC_ENDPOINT]
+
+
+def test_earthdata_eula_rejection_raises_typed_from_build(monkeypatch):
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    class _RaisingManager:
+        def get_credentials(self, endpoint):
+            raise S3CredentialsRequestFailure(
+                "EULA not accepted: https://urs.earthdata.nasa.gov/approve"
+            )
+
+    monkeypatch.setattr(
+        "earthaccess_auth.credentials.default_manager", lambda: _RaisingManager()
+    )
+    with pytest.raises(S3CredentialsRequestFailure, match="EULA"):
+        build_virtual_chunk_access({REGISTRY_PREFIX: {"earthdata": True}})
