@@ -75,6 +75,13 @@ def opener_icechunk(
         log_path,
         time.monotonic() - started_at,
     )
+    for prefix, container in (repo.config.virtual_chunk_containers or {}).items():
+        logger.info(
+            "Icechunk virtual chunk container: source=%s prefix=%s store=%s",
+            log_path,
+            prefix,
+            container.store,
+        )
     session = repo.readonly_session("main")
     store = session.store
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
@@ -208,7 +215,15 @@ class XarrayReader(Reader):
         """Configure the cached opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
         self.opener = self._open_cached
+        log_path = _log_path(self.src_path)
+        logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
+        started_at = time.monotonic()
         super().__attrs_post_init__()
+        logger.info(
+            "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
+            log_path,
+            time.monotonic() - started_at,
+        )
 
     def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
         """Open a dataset, reusing its Redis cache entry when enabled."""
