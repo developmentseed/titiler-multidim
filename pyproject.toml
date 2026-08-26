@@ -28,7 +28,7 @@ dependencies = [
     "aiobotocore>=2.24.0",
     "aiohttp",
     "boto3>=1.39.0",
-    "earthaccess-auth>=0.2.0",
+    "earthaccess-auth>=0.3.0",
     "cftime",
     "fastapi",
     "fsspec",
