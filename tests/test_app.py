@@ -287,3 +287,18 @@ def test_earthdata_auth_failure_returns_403(app, monkeypatch):
     response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
     assert response.status_code == 403
     assert "EULA" in response.text
+
+
+    def test_errors_not_cacheable(app):
+    """Error responses must not carry Cache-Control, so CDNs never cache them."""
+    err = app.get("/variables")  # missing required ?url= -> 422
+    assert err.status_code == 422
+    assert "cache-control" not in err.headers
+
+    ok = app.get("/colorMaps")
+    assert ok.status_code == 200
+    assert ok.headers["cache-control"] == "public, max-age=3600"
+
+    healthz = app.get("/healthz")
+    assert healthz.status_code == 200
+    assert "cache-control" not in healthz.headers

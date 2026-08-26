@@ -84,6 +84,7 @@ if api_settings.cors_origins:
 app.add_middleware(
     CacheControlMiddleware,
     cachecontrol=api_settings.cachecontrol,
+    cachecontrol_max_http_code=400,  # never let CDNs cache error responses
     exclude_path={r"/healthz"},
 )
 
