@@ -120,45 +120,126 @@ def test_cache_key_varies_with_chunk_access_config(monkeypatch):
     assert opened == 2  # same config -> cache hit
 
 
-def test_cache_hit_with_earthdata_entry_ensures_identity(monkeypatch):
+ENDPOINT = "https://archive.podaac.earthdata.nasa.gov/s3credentials"
+REGISTRY_PREFIX = "s3://podaac-ops-cumulus-protected/MUR/"
+
+
+def test_cache_hit_primes_endpoints_recorded_in_dataset(monkeypatch):
     """A dataset unpickled from the shared cache carries a refreshable
     credential callable that needs an EDL identity in THIS process; the
-    hit path must establish it (a fresh Lambda env with a shared Redis
-    otherwise fails with an opaque wrapped LoginStrategyUnavailable)."""
-    ensured = []
+    hit path must prime the endpoints the dataset recorded at open time
+    (a fresh Lambda env with a shared Redis otherwise fails with an
+    opaque wrapped LoginStrategyUnavailable)."""
+    primed = []
     monkeypatch.setattr(
-        "titiler.multidim.earthdata.ensure_earthdata_credentials",
-        lambda: ensured.append(True),
+        "titiler.multidim.earthdata.prime_earthdata_endpoints",
+        lambda endpoints: primed.append(list(endpoints)),
+    )
+    monkeypatch.setattr(reader, "cache_client", FakeRedis())
+    monkeypatch.setattr(reader.api_settings, "enable_cache", True)
+
+    def opener(*args, **kwargs):
+        ds = _tiny_dataset()
+        ds.encoding["earthdata_endpoints"] = [ENDPOINT]
+        return ds
+
+    monkeypatch.setattr(reader, "guess_opener", opener)
+    reader.XarrayReader("cache.zarr", "data")
+    assert primed == []  # miss path: the opener itself primes
+    reader.XarrayReader("cache.zarr", "data")  # cache hit
+    assert primed == [[ENDPOINT]]
+
+
+def test_cache_hit_without_earthdata_endpoints_never_primes(monkeypatch):
+    """Datasets that recorded no earthdata endpoints (plain zarr/NetCDF,
+    icechunk without earthdata containers) must never touch the earthdata
+    machinery — even when the service config has earthdata entries — so a
+    Secrets Manager or EDL outage cannot fail unrelated requests."""
+    primed = []
+    monkeypatch.setattr(
+        "titiler.multidim.earthdata.prime_earthdata_endpoints",
+        lambda endpoints: primed.append(list(endpoints)),
     )
     monkeypatch.setattr(reader, "cache_client", FakeRedis())
     monkeypatch.setattr(reader.api_settings, "enable_cache", True)
     monkeypatch.setattr(reader, "guess_opener", lambda *a, **k: _tiny_dataset())
-
-    access = {"s3://asdc-prod-protected/": {"earthdata": True}}
-    reader.XarrayReader(
-        "cache.zarr",
-        "data",
-        opener_options={"authorize_virtual_chunk_access": access},
-    )
-    ensured.clear()
-    reader.XarrayReader(  # cache hit
-        "cache.zarr",
-        "data",
-        opener_options={"authorize_virtual_chunk_access": access},
-    )
-    assert ensured  # identity established on the hit path too
+    access = {REGISTRY_PREFIX: {"earthdata": True}}
+    for _ in range(2):  # miss, then hit
+        reader.XarrayReader(
+            "cache.zarr",
+            "data",
+            opener_options={"authorize_virtual_chunk_access": access},
+        )
+    assert not primed
 
 
-def test_cache_hit_without_earthdata_entries_skips_ensure(monkeypatch):
-    """A cache hit for a config with no earthdata entries never calls ensure."""
-    ensured = []
+class _StubRepo:
+    def __init__(self, url_prefixes):
+        class _Container:
+            def __init__(self, url_prefix):
+                self.url_prefix = url_prefix
+
+        class _Config:
+            virtual_chunk_containers = {
+                f"c{i}": _Container(p) for i, p in enumerate(url_prefixes)
+            }
+
+        self.config = _Config()
+
+    def readonly_session(self, branch):
+        class _Session:
+            store = object()
+
+        return _Session()
+
+
+def test_opener_icechunk_primes_only_declared_earthdata_containers(monkeypatch):
+    """The opener primes EDL credentials only for earthdata containers the
+    repo actually declares, records them on the dataset for the cache-hit
+    path, and never touches EDL for a repo without earthdata containers."""
+    primed = []
     monkeypatch.setattr(
-        "titiler.multidim.earthdata.ensure_earthdata_credentials",
-        lambda: ensured.append(True),
+        "titiler.multidim.earthdata.prime_earthdata_endpoints",
+        lambda endpoints: primed.append(list(endpoints)),
     )
-    monkeypatch.setattr(reader, "cache_client", FakeRedis())
-    monkeypatch.setattr(reader.api_settings, "enable_cache", True)
-    monkeypatch.setattr(reader, "guess_opener", lambda *a, **k: _tiny_dataset())
-    reader.XarrayReader("cache.zarr", "data")
-    reader.XarrayReader("cache.zarr", "data")
-    assert not ensured
+    monkeypatch.setattr(
+        icechunk.Repository,
+        "open",
+        staticmethod(lambda **kwargs: _StubRepo([REGISTRY_PREFIX])),
+    )
+    monkeypatch.setattr(reader.xr, "open_dataset", lambda store, **k: _tiny_dataset())
+    access = {
+        REGISTRY_PREFIX: {"earthdata": True},
+        "s3://nasa-waterinsight/NLDAS3/": {"anonymous": True},
+    }
+    ds = reader.opener_icechunk(
+        "file:///tmp/repo", authorize_virtual_chunk_access=access
+    )
+    assert primed == [[ENDPOINT]]
+    assert ds.encoding["earthdata_endpoints"] == [ENDPOINT]
+
+
+def test_opener_icechunk_skips_earthdata_for_undeclared_containers(monkeypatch):
+    """An earthdata entry for another repo's bucket must not couple this
+    open to Earthdata availability or EULA state (a fully public dataset
+    served alongside a protected one must never 403/500 on EDL problems)."""
+    primed = []
+    monkeypatch.setattr(
+        "titiler.multidim.earthdata.prime_earthdata_endpoints",
+        lambda endpoints: primed.append(list(endpoints)),
+    )
+    monkeypatch.setattr(
+        icechunk.Repository,
+        "open",
+        staticmethod(lambda **kwargs: _StubRepo(["s3://nasa-waterinsight/NLDAS3/"])),
+    )
+    monkeypatch.setattr(reader.xr, "open_dataset", lambda store, **k: _tiny_dataset())
+    access = {
+        REGISTRY_PREFIX: {"earthdata": True},
+        "s3://nasa-waterinsight/NLDAS3/": {"anonymous": True},
+    }
+    ds = reader.opener_icechunk(
+        "file:///tmp/repo", authorize_virtual_chunk_access=access
+    )
+    assert primed == []
+    assert "earthdata_endpoints" not in ds.encoding

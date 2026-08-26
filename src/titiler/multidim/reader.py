@@ -23,7 +23,11 @@ from obstore.auth.boto3 import Boto3CredentialProvider
 from pydantic import BaseModel
 from titiler.xarray.io import Reader, xarray_open_dataset
 
-from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
+from titiler.multidim.chunk_access import (
+    ChunkAccessMapping,
+    build_virtual_chunk_access,
+    earthdata_endpoints,
+)
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
@@ -64,9 +68,21 @@ def opener_icechunk(
     repo = icechunk.Repository.open(
         storage=storage, authorize_virtual_chunk_access=credentials
     )
+    containers = repo.config.virtual_chunk_containers or {}
+    endpoints = earthdata_endpoints(
+        authorize_virtual_chunk_access,
+        (container.url_prefix for container in containers.values()),
+    )
+    if endpoints:
+        # establish the EDL identity and surface typed errors (EULA 403s)
+        # in Python — only for containers this repo actually declares, so
+        # a repo without earthdata containers never touches EDL
+        from titiler.multidim.earthdata import prime_earthdata_endpoints
+
+        prime_earthdata_endpoints(endpoints)
     session = repo.readonly_session("main")
     store = session.store
-    return xr.open_dataset(
+    ds = xr.open_dataset(
         store,
         group=group,
         decode_times=decode_times,
@@ -74,6 +90,12 @@ def opener_icechunk(
         consolidated=False,
         zarr_format=3,
     )
+    if endpoints:
+        # encoding survives pickling but is never served in API responses,
+        # so the cache-hit path can re-prime exactly these endpoints in a
+        # process that didn't open the dataset itself
+        ds.encoding["earthdata_endpoints"] = endpoints
+    return ds
 
 
 # TODO Is there a better way to check if a url points to a file or a prefix?
@@ -176,12 +198,6 @@ def _entry_options(entry: Any) -> Dict[str, Any]:
     return dict(entry)
 
 
-def _has_earthdata_entries(access: Optional[ChunkAccessMapping]) -> bool:
-    return any(
-        _entry_options(entry).get("earthdata") for entry in (access or {}).values()
-    )
-
-
 def _access_fingerprint(access: Optional[ChunkAccessMapping]) -> str:
     """Stable digest of the authorization config for the dataset cache key.
 
@@ -210,16 +226,6 @@ class XarrayReader(Reader):
     def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
         """Open a dataset, reusing its Redis cache entry when enabled."""
         access = kwargs.get("authorize_virtual_chunk_access")
-        if _has_earthdata_entries(access):
-            # a dataset unpickled from the shared cache carries a
-            # refreshable credential callable that resolves through
-            # default_manager() in *this* process, which needs the EDL
-            # identity exported here — the opener path below does this via
-            # to_credential, but a cache hit never runs it
-            from titiler.multidim.earthdata import ensure_earthdata_credentials
-
-            ensure_earthdata_credentials()
-
         cache_key = (
             f"{src_path}_group:{kwargs.get('group')}"
             f"_time:{kwargs.get('decode_times')}"
@@ -229,7 +235,20 @@ class XarrayReader(Reader):
         if api_settings.enable_cache:
             data_bytes = cache_client.get(cache_key)
             if data_bytes:
-                return pickle.loads(data_bytes)
+                ds = pickle.loads(data_bytes)
+                endpoints = ds.encoding.get("earthdata_endpoints")
+                if endpoints:
+                    # the unpickled dataset carries a refreshable credential
+                    # callable that resolves through default_manager() in
+                    # *this* process; the opener recorded which endpoints it
+                    # needs, so re-prime exactly those (typed EULA/login
+                    # errors surface here instead of opaquely in Rust)
+                    from titiler.multidim.earthdata import (
+                        prime_earthdata_endpoints,
+                    )
+
+                    prime_earthdata_endpoints(endpoints)
+                return ds
 
         ds = guess_opener(src_path, **kwargs)
 

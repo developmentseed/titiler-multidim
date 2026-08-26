@@ -109,24 +109,73 @@ def _secrets_client(secret_id: str):
     return boto3.client("secretsmanager", region_name=region)
 
 
-def _export(secret_string: str) -> None:
+def _parse_secret(secret_string: str) -> dict[str, str]:
+    """Parse the secret into the EARTHDATA_* variables it should export.
+
+    Falsy JSON values are skipped, not exported: "" is not None in
+    earthaccess-auth's credential branch, so an empty EARTHDATA_TOKEN
+    would shadow a working username/password with an empty bearer token,
+    and a JSON null would export the literal string "None" — a truthy,
+    unusable identity that latches permanently.
+
+    Raises:
+        LoginStrategyUnavailable: If no usable value survives.
+    """
     try:
         parsed = json.loads(secret_string)
     except ValueError:
         parsed = None
     if isinstance(parsed, dict):
-        known = {k: v for k, v in parsed.items() if k in _ENV_KEYS}
+        known = {k: str(v) for k, v in parsed.items() if k in _ENV_KEYS and v}
         if not known:
             msg = (
-                "earthdata secret is a JSON object but contains none of "
-                f"{', '.join(_ENV_KEYS)}; store the EDL token as a plain "
-                "string or under one of those keys"
+                "earthdata secret is a JSON object but holds no non-empty "
+                f"value under any of {', '.join(_ENV_KEYS)}; store the EDL "
+                "token as a plain string or under one of those keys"
             )
             raise LoginStrategyUnavailable(msg)
-        for key, value in known.items():
-            os.environ[key] = str(value)
-    else:
-        os.environ["EARTHDATA_TOKEN"] = secret_string.strip()
+        return known
+    token = secret_string.strip()
+    if not token:
+        raise LoginStrategyUnavailable("earthdata secret is empty")
+    return {"EARTHDATA_TOKEN": token}
+
+
+def _swap_env(new: dict[str, str]) -> dict[str, str]:
+    """Replace the EARTHDATA_* environment identity; return the old one.
+
+    New keys are written before stale ones are removed, so a concurrent
+    reader (e.g. earthaccess-auth's environment strategy inside another
+    request thread) observes the old identity or the new one, never an
+    empty environment mid-swap.
+    """
+    old = {k: os.environ[k] for k in _ENV_KEYS if k in os.environ}
+    os.environ.update(new)
+    for key in _ENV_KEYS:
+        if key not in new:
+            os.environ.pop(key, None)
+    return old
+
+
+def prime_earthdata_endpoints(endpoints) -> None:
+    """Establish the EDL identity and warm the credential cache in Python.
+
+    Runs before icechunk's Rust layer can invoke the refreshable
+    credential callable: Rust re-wraps whatever the callable raises as an
+    opaque storage error, losing the typed S3CredentialsRequestFailure
+    (EULA URLs) / LoginStrategyUnavailable that main.py maps to HTTP
+    403/500. The default manager caches per endpoint, so priming adds no
+    extra EDL round trips on subsequent opens.
+
+    Args:
+        endpoints: `s3credentials` endpoint URLs to warm.
+    """
+    ensure_earthdata_credentials()
+    from earthaccess_auth.credentials import default_manager
+
+    manager = default_manager()
+    for endpoint in endpoints:
+        manager.get_credentials(endpoint)
 
 
 def ensure_earthdata_credentials() -> None:
@@ -140,10 +189,12 @@ def ensure_earthdata_credentials() -> None:
     one secret). The secret is re-read every ``_REFRESH_INTERVAL`` seconds
     so rotation needs neither a redeploy nor a restart. A failed fetch on
     the *first* load is retried on the next call instead of poisoning the
-    process. A failed fetch while *refreshing* an already-loaded identity
-    does not fail the request either: the warm identity (exported env vars
-    plus the default auth manager built around them) is still valid, so the
-    failure is logged and retried after ``_RETRY_INTERVAL`` instead.
+    process. A failure while *refreshing* an already-loaded identity —
+    whether fetching the secret, parsing it, or logging the rotated
+    credentials in — does not fail the request either: the warm identity
+    (exported env vars plus the default auth manager built around them) is
+    still valid, so it keeps serving and the failure is logged and retried
+    after ``_RETRY_INTERVAL`` instead.
 
     Raises:
         LoginStrategyUnavailable: If the secret cannot be fetched on first
@@ -198,15 +249,42 @@ def ensure_earthdata_credentials() -> None:
             raise LoginStrategyUnavailable(msg) from e
         secret = response["SecretString"]
         if secret != _last_secret:
-            rotating = _last_secret is not None
-            # drop stale env keys unconditionally: reaching this line means
-            # any ambient identity was already judged unusable, and a
-            # rotation's shape change (token -> username/password) can't be
-            # allowed to leave a stale key shadowing the new credentials
-            for key in _ENV_KEYS:
-                os.environ.pop(key, None)
-            _export(secret)
-            if rotating:
-                _rebuild_default_auth()
+            if not _apply_secret(secret, rotating=_last_secret is not None):
+                # a refresh failure must not fail requests: the previous
+                # identity keeps serving, retry sooner than a full interval
+                _next_refresh = time.monotonic() + _RETRY_INTERVAL
+                return
             _last_secret = secret
         _next_refresh = time.monotonic() + _REFRESH_INTERVAL
+
+
+def _apply_secret(secret: str, rotating: bool) -> bool:
+    """Export a changed secret and rebuild the auth manager around it.
+
+    Returns False when applying a *rotation* failed: the previous identity
+    (env vars plus the warm default auth manager built around them, EDL
+    tokens live ~60 days) was restored and keeps serving. A failed first
+    load raises instead — there is nothing to fall back to.
+    """
+    try:
+        new_env = _parse_secret(secret)
+    except LoginStrategyUnavailable as e:
+        if not rotating:
+            raise
+        logger.error(
+            "rotated earthdata secret is unusable (%s); keeping the previous identity",
+            e,
+        )
+        return False
+    # the swap drops stale keys (a rotation's shape change, token ->
+    # username/password, can't leave a stale key shadowing the new
+    # credentials) without ever leaving the environment empty
+    previous = _swap_env(new_env)
+    if rotating:
+        try:
+            _rebuild_default_auth()
+        except LoginStrategyUnavailable:
+            # _rebuild_default_auth already logged the raw error
+            _swap_env(previous)
+            return False
+    return True

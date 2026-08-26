@@ -369,11 +369,14 @@ def test_usable_ambient_identity_latches(monkeypatch):
     assert os.environ["EARTHDATA_TOKEN"] == "ambient"
 
 
-def test_rebuild_failure_is_sanitized(monkeypatch, caplog):
-    """A raw EDL/HTTP failure while rebuilding the manager after rotation
-    must not leak to the client; the sanitized LoginStrategyUnavailable
-    message is returned instead, with details going to the service log."""
+def test_rebuild_failure_keeps_warm_identity(monkeypatch, caplog):
+    """A failed EDL login while applying a rotated secret must not fail
+    requests: the previous identity (env vars and the warm default auth
+    manager, EDL tokens live ~60 days) is restored and kept serving, the
+    raw EDL error goes to the service log only, and the retry is backed
+    off instead of re-attempting the login on every request."""
     import logging
+    import os
 
     from titiler.multidim import earthdata
     from titiler.multidim.earthdata import ensure_earthdata_credentials
@@ -390,15 +393,138 @@ def test_rebuild_failure_is_sanitized(monkeypatch, caplog):
             raise Exception(msg)
 
     ensure_earthdata_credentials()
-    import os
-
     assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
 
     monkeypatch.setattr("earthaccess_auth.auth.Auth", StubAuth)
     monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
     client.secret_string = "tok-v2"
     with caplog.at_level(logging.ERROR, logger="titiler.multidim.earthdata"):
-        with pytest.raises(LoginStrategyUnavailable) as excinfo:
-            ensure_earthdata_credentials()
-    assert "EDL says no" not in str(excinfo.value)
+        ensure_earthdata_credentials()  # must not raise
     assert "EDL says no" in caplog.text
+    # the previous identity keeps serving
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
+    # backed off: an immediate next call does not re-fetch or re-login
+    ensure_earthdata_credentials()
+    assert len(client.requested) == 2
+
+
+def test_rotation_to_unusable_secret_keeps_warm_identity(monkeypatch, caplog):
+    """A rotation to a secret with no usable keys must not fail requests
+    or drop the exported identity; it is logged and retried with backoff."""
+    import logging
+    import os
+
+    from titiler.multidim import earthdata
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string="tok-v1")
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()
+
+    monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
+    client.secret_string = json.dumps({"UNRELATED": "nope"})
+    with caplog.at_level(logging.ERROR, logger="titiler.multidim.earthdata"):
+        ensure_earthdata_credentials()  # must not raise
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
+    ensure_earthdata_credentials()  # backed off: no immediate re-fetch
+    assert len(client.requested) == 2
+
+
+def test_empty_token_in_secret_does_not_shadow_password(monkeypatch):
+    """An empty EARTHDATA_TOKEN value in the secret must be skipped: ""
+    is not None in earthaccess-auth's credential branch, so exporting it
+    would authenticate every request with an empty bearer token while the
+    working username/password sit unused."""
+    import os
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(
+        secret_string=json.dumps(
+            {
+                "EARTHDATA_TOKEN": "",
+                "EARTHDATA_USERNAME": "user",
+                "EARTHDATA_PASSWORD": "pass",
+            }
+        )
+    )
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()
+    assert "EARTHDATA_TOKEN" not in os.environ
+    assert os.environ["EARTHDATA_USERNAME"] == "user"
+    assert os.environ["EARTHDATA_PASSWORD"] == "pass"
+
+
+def test_all_null_secret_values_raise(monkeypatch):
+    """A JSON null must not become the literal string "None" in the
+    environment (a truthy, unusable identity that latches forever)."""
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string=json.dumps({"EARTHDATA_TOKEN": None}))
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable, match="EARTHDATA_"):
+        ensure_earthdata_credentials()
+    import os
+
+    assert "EARTHDATA_TOKEN" not in os.environ
+
+
+def test_prime_earthdata_endpoints_establishes_identity_then_warms(monkeypatch):
+    """Priming establishes the EDL identity once, then warms the shared
+    per-endpoint credential cache in Python — before icechunk's Rust layer
+    can invoke the refreshable callable and wrap failures opaquely."""
+    from titiler.multidim import earthdata
+
+    ensured = []
+    monkeypatch.setattr(
+        earthdata, "ensure_earthdata_credentials", lambda: ensured.append(True)
+    )
+
+    class StubManager:
+        warmed = []
+
+        def get_credentials(self, endpoint):
+            self.warmed.append(endpoint)
+
+    monkeypatch.setattr(
+        "earthaccess_auth.credentials.default_manager", lambda: StubManager()
+    )
+    earthdata.prime_earthdata_endpoints(
+        ["https://a/s3credentials", "https://b/s3credentials"]
+    )
+    assert ensured == [True]
+    assert StubManager.warmed == ["https://a/s3credentials", "https://b/s3credentials"]
+
+
+def test_prime_earthdata_endpoints_propagates_typed_eula(monkeypatch):
+    """An unaccepted EULA surfaces as the typed S3CredentialsRequestFailure
+    (mapped to HTTP 403 by main.py), not an opaque wrapped error."""
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    from titiler.multidim import earthdata
+
+    class RaisingManager:
+        def get_credentials(self, endpoint):
+            raise S3CredentialsRequestFailure("EULA not accepted")
+
+    monkeypatch.setattr(
+        "earthaccess_auth.credentials.default_manager", lambda: RaisingManager()
+    )
+    with pytest.raises(S3CredentialsRequestFailure, match="EULA"):
+        earthdata.prime_earthdata_endpoints(["https://a/s3credentials"])
+
+
+def test_blank_plain_secret_raises(monkeypatch):
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string="   \n")
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable, match="empty"):
+        ensure_earthdata_credentials()
+    import os
+
+    assert "EARTHDATA_TOKEN" not in os.environ

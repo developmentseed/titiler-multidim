@@ -8,7 +8,7 @@ deployment`), which does not install icechunk.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -85,44 +85,23 @@ class S3ChunkAccess(_CloudChunkAccess):
         return self
 
     def to_credential(self, prefix: str) -> icechunk.AnyS3Credential:
-        """Build the icechunk credential from the explicitly-set fields."""
+        """Build the icechunk credential from the explicitly-set fields.
+
+        Pure local construction, no network I/O: EDL identity and
+        credential priming happen in the opener, and only for containers
+        the opened repository actually declares (see earthdata_endpoints).
+        """
         if self.earthdata:
-            # both imports lazy: earthaccess-auth and icechunk are absent
-            # in the CDK deployment environment
+            # import lazy: earthaccess-auth is absent in the CDK deployment
+            # environment; earthdata_s3_credentials resolves the prefix via
+            # the CMR bucket registry itself and raises the typed
+            # S3CredentialsEndpointUnresolved for an unregistered bucket
+            # (parse_chunk_access already rejects those at parse time)
             from earthaccess_auth.adapters.icechunk import (
                 earthdata_s3_credentials,
             )
-            from earthaccess_auth.daac import resolve_bucket
 
-            from titiler.multidim.earthdata import ensure_earthdata_credentials
-
-            info = resolve_bucket(prefix)
-            if info is None:
-                # defensive backstop: parse_chunk_access already rejects an
-                # unregistered-bucket 'earthdata': true entry at parse time,
-                # so this should be practically unreachable in normal
-                # service operation; kept in case to_credential is ever
-                # called directly on a model built without going through
-                # parse_chunk_access
-                raise ValueError(
-                    f"virtual chunk entry {prefix!r} sets 'earthdata': true "
-                    "but its bucket is not in the CMR-derived bucket registry"
-                )
-            ensure_earthdata_credentials()
-
-            from earthaccess_auth.credentials import default_manager
-
-            # Prime the shared per-endpoint credential cache in Python
-            # before icechunk's Rust layer ever invokes the refreshable
-            # callable: Rust re-wraps whatever the callable raises as a
-            # generic storage error, losing the typed
-            # S3CredentialsRequestFailure (EULA URLs) /
-            # LoginStrategyUnavailable that main.py maps to HTTP 403/500.
-            # The manager caches per endpoint, so this adds no extra EDL
-            # round trips on subsequent opens.
-            default_manager().get_credentials(info.endpoint)
-
-            return earthdata_s3_credentials(info.endpoint)
+            return earthdata_s3_credentials(prefix)
 
         import icechunk
 
@@ -245,6 +224,29 @@ def parse_chunk_access(
 
         parsed[prefix] = entry
     return parsed
+
+
+def earthdata_endpoints(
+    authorize_virtual_chunk_access: Optional[ChunkAccessMapping],
+    declared_prefixes: Iterable[str],
+) -> list[str]:
+    """`s3credentials` endpoints for earthdata entries a repo declares.
+
+    Only entries whose prefix matches a virtual chunk container the opened
+    repository actually declares are resolved, so an earthdata entry for
+    another repo's bucket never couples this open to Earthdata Login
+    availability or EULA state.
+    """
+    declared = set(declared_prefixes)
+    endpoints = set()
+    for prefix, entry in parse_chunk_access(authorize_virtual_chunk_access).items():
+        if isinstance(entry, S3ChunkAccess) and entry.earthdata and prefix in declared:
+            from earthaccess_auth.daac import resolve_bucket
+
+            info = resolve_bucket(prefix)
+            if info is not None:  # parse_chunk_access guarantees registration
+                endpoints.add(info.endpoint)
+    return sorted(endpoints)
 
 
 def build_virtual_chunk_access(
