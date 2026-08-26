@@ -10,7 +10,15 @@ ARN = "arn:aws:secretsmanager:us-west-2:123456789012:secret:edl-token-AbCdEf"
 
 @pytest.fixture(autouse=True)
 def clean_state(monkeypatch):
-    """Reset the module's once-guard and strip ambient EDL env vars."""
+    """Reset module state, strip ambient EDL env vars, stub EDL login.
+
+    Every successful secret load rebuilds the default auth manager, so the
+    EDL Auth is stubbed by default (no network; individual tests override
+    it to exercise failure paths) and the process-wide manager is reset so
+    tests can't leak identities into each other.
+    """
+    from earthaccess_auth import credentials
+
     from titiler.multidim import earthdata
 
     monkeypatch.setattr(earthdata, "_next_refresh", None)
@@ -18,6 +26,16 @@ def clean_state(monkeypatch):
     for key in earthdata._ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.delenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", raising=False)
+    monkeypatch.delenv("TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS", raising=False)
+
+    class _OkAuth:
+        authenticated = True
+
+        def login(self, strategy):
+            return self
+
+    monkeypatch.setattr("earthaccess_auth.auth.Auth", _OkAuth)
+    monkeypatch.setattr(credentials, "_default_manager", None)
 
 
 class StubSecretsClient:
@@ -48,18 +66,39 @@ def test_noop_without_secret_arn(monkeypatch):
     assert client.requested == []
 
 
-def test_existing_env_identity_wins(monkeypatch):
+def test_configured_secret_overrides_ambient_env(monkeypatch):
+    """When a secret ARN is configured, the secret is authoritative: a
+    stale-but-truthy ambient EARTHDATA_TOKEN must not latch permanently
+    and silently disable rotation-without-restart."""
     from titiler.multidim.earthdata import ensure_earthdata_credentials
 
     monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
-    monkeypatch.setenv("EARTHDATA_TOKEN", "already-set")
+    monkeypatch.setenv("EARTHDATA_TOKEN", "stale-ambient")
     client = StubSecretsClient(secret_string="from-secret")
     _install(monkeypatch, client)
     ensure_earthdata_credentials()
-    assert client.requested == []
+    assert client.requested == [ARN]
     import os
 
-    assert os.environ["EARTHDATA_TOKEN"] == "already-set"
+    assert os.environ["EARTHDATA_TOKEN"] == "from-secret"
+
+
+def test_fetch_failure_falls_back_to_ambient_env(monkeypatch):
+    """If the configured secret can't be fetched but a usable ambient
+    identity exists, serve with the ambient identity instead of failing,
+    and keep retrying the secret on the backoff cadence."""
+    import os
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    monkeypatch.setenv("EARTHDATA_TOKEN", "ambient")
+    client = StubSecretsClient(error=RuntimeError("AccessDeniedException"))
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()  # must not raise
+    assert os.environ["EARTHDATA_TOKEN"] == "ambient"
+    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert client.requested == [ARN]
 
 
 def test_raw_string_secret_becomes_token(monkeypatch):
@@ -383,9 +422,11 @@ def test_refresh_failure_keeps_serving_warm_identity(monkeypatch, caplog):
     assert len(client.requested) == 2
 
 
-def test_rotation_reexports_and_rebuilds_manager(monkeypatch):
-    """After the refresh interval, a changed secret is re-exported and the
-    process-wide credential manager is rebuilt around the new identity."""
+def test_load_and_rotation_rebuild_manager(monkeypatch):
+    """Every successful secret load — first load included — installs the
+    secret's identity as the process-wide manager, so an identity cached
+    earlier (e.g. netrc picked up during a fetch-failure backoff window)
+    can never keep shadowing the secret."""
     from titiler.multidim import earthdata
     from titiler.multidim.earthdata import ensure_earthdata_credentials
 
@@ -410,7 +451,8 @@ def test_rotation_reexports_and_rebuilds_manager(monkeypatch):
     import os
 
     assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
-    assert installed == []  # first load: manager builds lazily from env
+    assert len(installed) == 1  # first load installs the secret's identity
+    assert isinstance(installed[0], StubAuth)
 
     # within the interval: no re-fetch
     ensure_earthdata_credentials()
@@ -421,8 +463,7 @@ def test_rotation_reexports_and_rebuilds_manager(monkeypatch):
     client.secret_string = "tok-v2"
     ensure_earthdata_credentials()
     assert os.environ["EARTHDATA_TOKEN"] == "tok-v2"
-    assert len(installed) == 1
-    assert isinstance(installed[0], StubAuth)
+    assert len(installed) == 2
 
 
 def test_unchanged_secret_recheck_does_not_rebuild(monkeypatch):
@@ -437,18 +478,19 @@ def test_unchanged_secret_recheck_does_not_rebuild(monkeypatch):
         "earthaccess_auth.credentials.set_default_auth", installed.append
     )
     ensure_earthdata_credentials()
+    assert len(installed) == 1  # first load
     monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
     ensure_earthdata_credentials()
     assert client.requested == [ARN, ARN]
-    assert installed == []
+    assert len(installed) == 1  # unchanged secret: no second rebuild
 
 
-def test_usable_ambient_identity_latches(monkeypatch):
-    """Operator-provided usable env identity permanently wins over the secret."""
+def test_ambient_identity_wins_without_arn(monkeypatch):
+    """With no secret ARN configured, an ambient identity latches and is
+    never touched — local development and netrc setups stay untouched."""
     from titiler.multidim import earthdata
     from titiler.multidim.earthdata import ensure_earthdata_credentials
 
-    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
     monkeypatch.setenv("EARTHDATA_TOKEN", "ambient")
     client = StubSecretsClient(secret_string="from-secret")
     _install(monkeypatch, client)
@@ -562,6 +604,108 @@ def test_all_null_secret_values_raise(monkeypatch):
     import os
 
     assert "EARTHDATA_TOKEN" not in os.environ
+
+
+EARTHDATA_ACCESS_ENV = json.dumps(
+    {"s3://podaac-ops-cumulus-protected/MUR/": {"earthdata": True}}
+)
+
+
+def test_rotation_to_rejected_token_rolls_back(monkeypatch):
+    """EDL marks any non-empty token authenticated without a network call,
+    so token-shaped rotations need a real check: the rebuild probes one
+    configured earthdata endpoint, and a definitive 401 rejects the new
+    identity — the previous one is restored and keeps serving."""
+    import os
+
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    from titiler.multidim import earthdata
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    monkeypatch.setenv("TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS", EARTHDATA_ACCESS_ENV)
+    client = StubSecretsClient(secret_string="tok-v1")
+    _install(monkeypatch, client)
+
+    probes = {"fail": False}
+
+    def probe(auth, endpoint):
+        if probes["fail"]:
+            raise S3CredentialsRequestFailure("rejected", status_code=401)
+
+    monkeypatch.setattr("earthaccess_auth.credentials.fetch_s3_credentials", probe)
+    ensure_earthdata_credentials()
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
+
+    probes["fail"] = True
+    monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
+    client.secret_string = "tok-bad"
+    ensure_earthdata_credentials()  # must not raise
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"  # rolled back
+    ensure_earthdata_credentials()  # backed off
+    assert len(client.requested) == 2
+
+
+def test_probe_eula_403_does_not_reject_rotation(monkeypatch):
+    """An unaccepted EULA on the probe endpoint is a user-side problem,
+    not evidence the rotated credentials are bad: accept the identity."""
+    import os
+
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    from titiler.multidim import earthdata
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    monkeypatch.setenv("TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS", EARTHDATA_ACCESS_ENV)
+    client = StubSecretsClient(secret_string="tok-v1")
+    _install(monkeypatch, client)
+
+    def probe(auth, endpoint):
+        raise S3CredentialsRequestFailure("EULA not accepted", status_code=403)
+
+    monkeypatch.setattr("earthaccess_auth.credentials.fetch_s3_credentials", probe)
+    ensure_earthdata_credentials()
+    monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
+    client.secret_string = "tok-v2"
+    ensure_earthdata_credentials()
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-v2"
+
+
+def test_binary_secret_is_a_typed_failure_with_backoff(monkeypatch):
+    """A SecretBinary-only secret (no SecretString key) must surface as
+    the same sanitized failure as an unreadable secret — with backoff —
+    not an untyped KeyError that escapes the backoff logic."""
+
+    class BinaryClient(StubSecretsClient):
+        def get_secret_value(self, SecretId):
+            self.requested.append(SecretId)
+            return {"SecretBinary": b"\x00"}
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = BinaryClient()
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable):
+        ensure_earthdata_credentials()
+    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert client.requested == [ARN]
+
+
+def test_json_string_scalar_secret_strips_quotes(monkeypatch):
+    """A secret stored as a JSON string scalar (console/jq round trips)
+    must export the decoded token, not one wrapped in quote characters."""
+    import os
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string='"tok-json"\n')
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()
+    assert os.environ["EARTHDATA_TOKEN"] == "tok-json"
 
 
 def test_prime_earthdata_endpoints_establishes_identity_then_warms(monkeypatch):

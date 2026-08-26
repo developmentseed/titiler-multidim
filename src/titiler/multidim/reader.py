@@ -43,8 +43,8 @@ def opener_icechunk(
     authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
-    # parse once; build_virtual_chunk_access and earthdata_endpoints both
-    # consume the parsed models
+    # the config is parsed exactly once; build_virtual_chunk_access and
+    # earthdata_endpoints both consume the parsed models
     entries = parse_chunk_access(authorize_virtual_chunk_access)
     credentials = build_virtual_chunk_access(entries)
 
@@ -217,6 +217,13 @@ def _access_fingerprint(access: Optional[ChunkAccessMapping]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
+# the service-wide config can't change without a restart, so its digest —
+# the one every request using the default authorization needs — is computed
+# once instead of re-hashed per request
+_DEFAULT_ACCESS = dict(api_settings.authorized_chunk_access)
+_DEFAULT_ACCESS_FINGERPRINT = _access_fingerprint(_DEFAULT_ACCESS)
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with redis cache"""
@@ -230,10 +237,15 @@ class XarrayReader(Reader):
     def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
         """Open a dataset, reusing its Redis cache entry when enabled."""
         access = kwargs.get("authorize_virtual_chunk_access")
+        fingerprint = (
+            _DEFAULT_ACCESS_FINGERPRINT
+            if access == _DEFAULT_ACCESS
+            else _access_fingerprint(access)
+        )
         cache_key = (
             f"{src_path}_group:{kwargs.get('group')}"
             f"_time:{kwargs.get('decode_times')}"
-            f"_access:{_access_fingerprint(access)}"
+            f"_access:{fingerprint}"
         )
 
         if api_settings.enable_cache:
@@ -254,13 +266,14 @@ class XarrayReader(Reader):
                 return ds
 
         ds = guess_opener(src_path, **kwargs)
+        # pop unconditionally: the encoding slot is only the in-process
+        # opener->here handoff, and must never ride datasets served on
+        endpoints = ds.encoding.pop("earthdata_endpoints", None)
 
         if api_settings.enable_cache:
             # the cache entry is an explicit (endpoints, dataset) pair: the
             # cross-process re-prime contract lives in the cache layer, not
-            # inside xarray metadata (the opener's encoding slot is only the
-            # in-process handoff, popped here)
-            endpoints = ds.encoding.pop("earthdata_endpoints", None)
+            # inside xarray metadata
             cache_client.set(cache_key, pickle.dumps((endpoints, ds)), ex=300)
 
         return ds

@@ -335,6 +335,85 @@ def test_login_attempt_failure_returns_sanitized_500(app, monkeypatch):
     assert "Earthdata Login" in response.text
 
 
+def test_expired_service_credentials_return_500_not_eula_403(app, monkeypatch):
+    """A 401 from the s3credentials endpoint means the SERVICE's EDL
+    credentials are invalid (e.g. the ~60-day token expired) — an operator
+    problem that must alarm as a 5xx, not a 403 telling end users to
+    accept EULAs they can't act on. The raw body still stays out of the
+    response."""
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    def raise_401(*args, **kwargs):
+        raise S3CredentialsRequestFailure(
+            "The s3credentials endpoint https://internal.example/s3credentials "
+            "rejected the request with status 401:\nDAAC-INTERNAL-BODY",
+            status_code=401,
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_401)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "internal.example" not in response.text
+    assert "EULA" not in response.text
+    assert "Earthdata" in response.text
+
+
+def test_icechunk_wrapped_eula_failure_returns_sanitized_403(app, monkeypatch):
+    """icechunk re-invokes the refreshable credential callable in Rust at
+    chunk-read time (the steady state, ~2-3 min before each hourly
+    expiry) and stringifies whatever it raises into an IcechunkError.
+    That wrapped text — raw DAAC body included — must never reach the
+    client, and an identifiable EULA rejection must still map to 403."""
+    import icechunk
+
+    def raise_wrapped(*args, **kwargs):
+        raise icechunk.IcechunkError(
+            "error fetching virtual reference: credential refresh failed: "
+            "S3CredentialsRequestFailure: The s3credentials endpoint "
+            "https://internal.example/s3credentials rejected the request "
+            "with status 403:\nDAAC-INTERNAL-BODY"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_wrapped)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 403
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "internal.example" not in response.text
+    assert "EULA" in response.text
+
+
+def test_icechunk_wrapped_401_returns_sanitized_500(app, monkeypatch):
+    import icechunk
+
+    def raise_wrapped(*args, **kwargs):
+        raise icechunk.IcechunkError(
+            "S3CredentialsRequestFailure: The s3credentials endpoint "
+            "https://internal.example/s3credentials rejected the request "
+            "with status 401:\nDAAC-INTERNAL-BODY"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_wrapped)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "EULA" not in response.text
+
+
+def test_icechunk_generic_error_is_sanitized_500(app, monkeypatch):
+    """Any icechunk storage error can chain upstream response text
+    (presigned URLs, internal hostnames); clients get a fixed message."""
+    import icechunk
+
+    def raise_storage(*args, **kwargs):
+        raise icechunk.IcechunkError("storage error: https://internal.example/x")
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_storage)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "internal.example" not in response.text
+
+
 def test_errors_not_cacheable(app):
     """Error responses must not carry Cache-Control, so CDNs never cache them."""
     err = app.get("/variables")  # missing required ?url= -> 422

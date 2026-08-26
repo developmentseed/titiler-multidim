@@ -19,14 +19,18 @@ from titiler.multidim.chunk_access import (
 from titiler.multidim.settings import ApiSettings
 
 
+def build(mapping):
+    """Parse-then-build, matching the production flow in opener_icechunk
+    (build_virtual_chunk_access takes already-parsed entries)."""
+    return build_virtual_chunk_access(parse_chunk_access(mapping))
+
+
 def test_empty_mapping_returns_no_credentials():
-    assert build_virtual_chunk_access({}) is None
+    assert build({}) is None
 
 
 def test_s3_entry_builds_credentials():
-    credentials = build_virtual_chunk_access(
-        {"s3://nasa-waterinsight/NLDAS3/": {"anonymous": True}}
-    )
+    credentials = build({"s3://nasa-waterinsight/NLDAS3/": {"anonymous": True}})
     assert credentials is not None
     assert "s3://nasa-waterinsight/NLDAS3/" in credentials
 
@@ -43,19 +47,19 @@ def test_empty_options_are_rejected(prefix):
     # credential use is opt-in for every scheme: an empty entry must fail
     # validation instead of silently granting the service's own credentials
     with pytest.raises(ValueError, match="opt-in"):
-        build_virtual_chunk_access({prefix: {}})
+        build({prefix: {}})
 
 
 def test_cloud_entry_with_no_access_mode_selected_is_rejected():
     # anonymous: false sets a field but selects no access mode, so icechunk
     # would still fall back to the service's ambient credentials
     with pytest.raises(ValueError, match="opt-in"):
-        build_virtual_chunk_access({"s3://bucket/prefix/": {"anonymous": False}})
+        build({"s3://bucket/prefix/": {"anonymous": False}})
 
 
 @pytest.mark.parametrize("prefix", ["gs://bucket/prefix/", "gcs://bucket/prefix/"])
 def test_gcs_entry_builds_credentials(prefix):
-    credentials = build_virtual_chunk_access({prefix: {"anonymous": True}})
+    credentials = build({prefix: {"anonymous": True}})
     assert credentials is not None
     assert prefix in credentials
 
@@ -64,7 +68,7 @@ def test_gcs_entry_builds_credentials(prefix):
     "prefix", ["az://container/prefix/", "azure://container/prefix/"]
 )
 def test_azure_entry_builds_credentials(prefix):
-    credentials = build_virtual_chunk_access({prefix: {"from_env": True}})
+    credentials = build({prefix: {"from_env": True}})
     assert credentials is not None
     assert prefix in credentials
 
@@ -73,14 +77,14 @@ def test_azure_anonymous_is_rejected():
     # icechunk has no anonymous Azure credential variant, so the option must
     # fail validation instead of raising TypeError when the dataset is opened
     with pytest.raises(ValueError, match="anonymous"):
-        build_virtual_chunk_access({"az://container/prefix/": {"anonymous": True}})
+        build({"az://container/prefix/": {"anonymous": True}})
 
 
 def test_unknown_cloud_option_is_rejected():
     # an option outside the enumerated model fields must fail at parse time
     # instead of silently passing through to icechunk
     with pytest.raises(ValueError, match="region"):
-        build_virtual_chunk_access(
+        build(
             {
                 "s3://bucket/prefix/": {
                     "access_key_id": "AKIA-TEST",
@@ -94,9 +98,7 @@ def test_mismatched_model_type_is_rejected():
     # a parsed model under a prefix of a different scheme must be rejected,
     # not silently converted when its set fields happen to overlap
     with pytest.raises(ValueError, match="expects S3ChunkAccess"):
-        build_virtual_chunk_access(
-            {"s3://bucket/prefix/": GcsChunkAccess(anonymous=True)}
-        )
+        build({"s3://bucket/prefix/": GcsChunkAccess(anonymous=True)})
 
 
 def test_settings_parse_returns_typed_models():
@@ -118,12 +120,12 @@ def test_settings_rejects_invalid_chunk_access_shape():
 def test_file_scheme_is_rejected():
     # virtual chunks must never read the server's local filesystem
     with pytest.raises(ValueError, match="local filesystem"):
-        build_virtual_chunk_access({"file:///data/chunks/": {}})
+        build({"file:///data/chunks/": {}})
 
 
 def test_unsupported_scheme_raises():
     with pytest.raises(ValueError, match="ftp"):
-        build_virtual_chunk_access({"ftp://host/prefix/": {"anonymous": True}})
+        build({"ftp://host/prefix/": {"anonymous": True}})
 
 
 def test_mixed_case_scheme_prefix_is_rejected():
@@ -132,7 +134,7 @@ def test_mixed_case_scheme_prefix_is_rejected():
     # yet can never match must fail at parse time instead of silently doing
     # nothing at request time
     with pytest.raises(ValueError, match="lowercase"):
-        build_virtual_chunk_access({"S3://bucket/prefix/": {"anonymous": True}})
+        build({"S3://bucket/prefix/": {"anonymous": True}})
 
 
 @pytest.mark.parametrize(
@@ -293,6 +295,6 @@ def test_earthdata_entry_builds_refreshable_credential():
         "earthaccess_auth.adapters.icechunk.get_credentials_callable",
         return_value=_fake_earthdata_credentials,
     ):
-        creds = build_virtual_chunk_access({REGISTRY_PREFIX: {"earthdata": True}})
+        creds = build({REGISTRY_PREFIX: {"earthdata": True}})
     assert creds is not None
     assert REGISTRY_PREFIX in creds

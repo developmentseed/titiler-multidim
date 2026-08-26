@@ -173,6 +173,24 @@ def test_cache_hit_without_earthdata_endpoints_never_primes(monkeypatch):
     assert not primed
 
 
+def test_endpoint_marker_never_leaves_open_cached(monkeypatch):
+    """The ds.encoding handoff is internal to the opener->cache flow: the
+    marker is popped whether or not caching is enabled, so it never rides
+    datasets served to the rest of the app."""
+    monkeypatch.setattr(reader.api_settings, "enable_cache", False)
+    made = []
+
+    def opener(*args, **kwargs):
+        ds = _tiny_dataset()
+        ds.encoding["earthdata_endpoints"] = [ENDPOINT]
+        made.append(ds)
+        return ds
+
+    monkeypatch.setattr(reader, "guess_opener", opener)
+    reader.XarrayReader("cache.zarr", "data")
+    assert "earthdata_endpoints" not in made[0].encoding
+
+
 def test_cache_entry_is_endpoints_dataset_pair(monkeypatch):
     """The cross-process re-prime contract lives in the cache entry itself
     — an explicit (endpoints, dataset) pair — not smuggled inside xarray

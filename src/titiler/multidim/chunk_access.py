@@ -249,17 +249,14 @@ def earthdata_endpoints(
 
 
 def build_virtual_chunk_access(
-    authorize_virtual_chunk_access: Optional[ChunkAccessMapping],
+    entries: Mapping[str, AnyChunkAccess],
 ) -> Optional[Dict[str, Optional[icechunk.AnyCredential]]]:
-    """Translate virtual chunk access settings into icechunk credentials.
+    """Translate parsed virtual chunk access entries into icechunk credentials.
 
-    Entries are parsed into per-scheme option models by parse_chunk_access
-    (which also rejects file://, unknown schemes, and unrecognized options),
-    then each entry builds its own icechunk credential via to_credential().
-
-    Args:
-        authorize_virtual_chunk_access: Mapping of container URL prefix to
-            access options (raw dicts or parsed models).
+    Takes already-parsed entries (see parse_chunk_access, which rejects
+    file://, unknown schemes, and unrecognized options) so callers parse
+    the config exactly once; each entry builds its own icechunk credential
+    via to_credential().
 
     Returns:
         The mapping for Repository.open(authorize_virtual_chunk_access), or
@@ -267,7 +264,6 @@ def build_virtual_chunk_access(
     """
     import icechunk
 
-    entries = parse_chunk_access(authorize_virtual_chunk_access)
     if not entries:
         return None
     return icechunk.containers_credentials(
