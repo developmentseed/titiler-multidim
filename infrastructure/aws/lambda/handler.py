@@ -304,7 +304,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     timeout so a slow X-Ray endpoint cannot push the invocation over
     the function's configured limit.
     """
+    logger = logging.getLogger("titiler.multidim.lambda")
+    logger.info("Lambda request started: request_id=%s", context.aws_request_id)
     result = _mangum(event, context)
+    logger.info("Lambda request completed: request_id=%s", context.aws_request_id)
     if api_settings.telemetry_enabled:
         _provider.force_flush(timeout_millis=5_000)
     return result

@@ -1,6 +1,7 @@
 """titiler.multidim."""
 
 import logging
+import os
 
 import zarr
 from fastapi import Depends, FastAPI
@@ -22,9 +23,14 @@ from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True
-logging.getLogger("rio-tiler").setLevel(logging.ERROR)
+logging.getLogger("rio_tiler").setLevel(logging.INFO)
 
 api_settings = ApiSettings()
+
+if "AWS_EXECUTION_ENV" not in os.environ:
+    logging.basicConfig(
+        level=logging.DEBUG if api_settings.debug else logging.INFO,
+    )
 
 app = FastAPI(
     title=api_settings.name,
@@ -106,3 +112,16 @@ def clear_cache(cache_client=Depends(get_redis)):
     """Clear the cache."""
     cache_client.flushall()
     return {"status": "cache cleared!"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    log_level = "debug" if api_settings.debug else "info"
+    uvicorn.run(
+        "titiler.multidim.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level=log_level,
+    )

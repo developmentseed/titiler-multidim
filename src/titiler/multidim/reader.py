@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import pickle
+import time
 from typing import (
     Any,
     Dict,
@@ -26,6 +28,12 @@ from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
 cache_client = get_redis()
+logger = logging.getLogger(__name__)
+
+
+def _log_path(src_path: str) -> str:
+    """Return a source path without a potentially sensitive query string."""
+    return src_path.split("?", maxsplit=1)[0]
 
 
 def opener_icechunk(
@@ -56,12 +64,22 @@ def opener_icechunk(
             f"icechunk storage for protocol {protocol} is not implemented"
         )
 
+    log_path = _log_path(src_path)
+    logger.info("Opening Icechunk repository: source=%s", log_path)
+    started_at = time.monotonic()
     repo = icechunk.Repository.open(
         storage=storage, authorize_virtual_chunk_access=credentials
     )
+    logger.info(
+        "Opened Icechunk repository: source=%s elapsed_seconds=%.2f",
+        log_path,
+        time.monotonic() - started_at,
+    )
     session = repo.readonly_session("main")
     store = session.store
-    return xr.open_dataset(
+    logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
+    started_at = time.monotonic()
+    dataset = xr.open_dataset(
         store,
         group=group,
         decode_times=decode_times,
@@ -69,6 +87,12 @@ def opener_icechunk(
         consolidated=False,
         zarr_format=3,
     )
+    logger.info(
+        "Opened Icechunk dataset: source=%s elapsed_seconds=%.2f",
+        log_path,
+        time.monotonic() - started_at,
+    )
+    return dataset
 
 
 # TODO Is there a better way to check if a url points to a file or a prefix?
@@ -76,6 +100,7 @@ def _is_dir(store, path: str = "") -> bool:
     """Return True if path is a prefix containing any objects (directory-like)."""
     # sanitize path and slashes
     path = path.rstrip("/") + "/"
+    logger.info("Checking dataset storage prefix: prefix=%s", path)
     stream = store.list(prefix=path, chunk_size=1)
     try:
         batch = next(stream)
@@ -138,7 +163,16 @@ def guess_opener(
     """
 
     # Identify the storage backend
+    log_path = _log_path(src_path)
+    logger.info("Identifying dataset storage: source=%s", log_path)
+    started_at = time.monotonic()
     storage_format = identify_storage_backend(src_path)
+    logger.info(
+        "Identified dataset storage: source=%s format=%s elapsed_seconds=%.2f",
+        log_path,
+        storage_format,
+        time.monotonic() - started_at,
+    )
 
     if storage_format == "icechunk":
         return opener_icechunk(
@@ -182,15 +216,31 @@ class XarrayReader(Reader):
             f"{src_path}_group:{kwargs.get('group')}_time:{kwargs.get('decode_times')}"
         )
 
+        log_path = _log_path(src_path)
         if api_settings.enable_cache:
+            logger.info("Reading dataset cache: source=%s", log_path)
+            started_at = time.monotonic()
             data_bytes = cache_client.get(cache_key)
+            logger.info(
+                "Read dataset cache: source=%s hit=%s elapsed_seconds=%.2f",
+                log_path,
+                bool(data_bytes),
+                time.monotonic() - started_at,
+            )
             if data_bytes:
                 return pickle.loads(data_bytes)
 
         ds = guess_opener(src_path, **kwargs)
 
         if api_settings.enable_cache:
+            logger.info("Writing dataset cache: source=%s", log_path)
+            started_at = time.monotonic()
             cache_client.set(cache_key, pickle.dumps(ds), ex=300)
+            logger.info(
+                "Wrote dataset cache: source=%s elapsed_seconds=%.2f",
+                log_path,
+                time.monotonic() - started_at,
+            )
 
         return ds
 
