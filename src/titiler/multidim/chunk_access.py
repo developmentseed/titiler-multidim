@@ -119,9 +119,8 @@ class GcsChunkAccess(_CloudChunkAccess):
     application_credentials: str | None = None
     bearer_token: str | None = None
 
-    def to_credential(self, prefix: str) -> icechunk.AnyGcsCredential:
+    def to_credential(self) -> icechunk.AnyGcsCredential:
         """Build the icechunk credential from the explicitly-set fields."""
-        del prefix  # uniform signature; only s3 entries resolve their prefix
         import icechunk
 
         return icechunk.gcs_credentials(**self.model_dump(exclude_unset=True))
@@ -138,9 +137,8 @@ class AzureChunkAccess(_CloudChunkAccess):
     sas_token: str | None = None
     bearer_token: str | None = None
 
-    def to_credential(self, prefix: str) -> icechunk.AnyAzureCredential:
+    def to_credential(self) -> icechunk.AnyAzureCredential:
         """Build the icechunk credential from the explicitly-set fields."""
-        del prefix  # uniform signature; only s3 entries resolve their prefix
         import icechunk
 
         return icechunk.azure_credentials(**self.model_dump(exclude_unset=True))
@@ -227,19 +225,20 @@ def parse_chunk_access(
 
 
 def earthdata_endpoints(
-    authorize_virtual_chunk_access: Optional[ChunkAccessMapping],
+    entries: Mapping[str, AnyChunkAccess],
     declared_prefixes: Iterable[str],
 ) -> list[str]:
     """`s3credentials` endpoints for earthdata entries a repo declares.
 
-    Only entries whose prefix matches a virtual chunk container the opened
-    repository actually declares are resolved, so an earthdata entry for
-    another repo's bucket never couples this open to Earthdata Login
-    availability or EULA state.
+    Takes already-parsed entries (see parse_chunk_access) so callers that
+    also build credentials parse the config once. Only entries whose prefix
+    matches a virtual chunk container the opened repository actually
+    declares are resolved, so an earthdata entry for another repo's bucket
+    never couples this open to Earthdata Login availability or EULA state.
     """
     declared = set(declared_prefixes)
     endpoints = set()
-    for prefix, entry in parse_chunk_access(authorize_virtual_chunk_access).items():
+    for prefix, entry in entries.items():
         if isinstance(entry, S3ChunkAccess) and entry.earthdata and prefix in declared:
             from earthaccess_auth.daac import resolve_bucket
 
@@ -272,5 +271,13 @@ def build_virtual_chunk_access(
     if not entries:
         return None
     return icechunk.containers_credentials(
-        {prefix: options.to_credential(prefix) for prefix, options in entries.items()}
+        {
+            # only s3 entries resolve their prefix (earthdata routing)
+            prefix: (
+                options.to_credential(prefix)
+                if isinstance(options, S3ChunkAccess)
+                else options.to_credential()
+            )
+            for prefix, options in entries.items()
+        }
     )

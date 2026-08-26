@@ -254,17 +254,26 @@ def test_earthdata_endpoints_only_for_declared_containers():
     """Only earthdata entries the opened repo actually declares resolve to
     endpoints: an earthdata entry for another repo's bucket must not couple
     this open to EDL availability or EULA state."""
-    from titiler.multidim.chunk_access import earthdata_endpoints
+    # import both from the same module generation: the app fixture in
+    # conftest.py clears and re-imports titiler.multidim modules, so the
+    # module-level parse_chunk_access may be a stale copy whose models fail
+    # earthdata_endpoints' isinstance check against the fresh classes
+    from titiler.multidim.chunk_access import (
+        earthdata_endpoints,
+        parse_chunk_access as parse_current,
+    )
 
-    access = {
-        REGISTRY_PREFIX: {"earthdata": True},
-        "s3://nasa-waterinsight/NLDAS3/": {"anonymous": True},
-    }
-    assert earthdata_endpoints(access, [REGISTRY_PREFIX, "s3://other/"]) == [
+    entries = parse_current(
+        {
+            REGISTRY_PREFIX: {"earthdata": True},
+            "s3://nasa-waterinsight/NLDAS3/": {"anonymous": True},
+        }
+    )
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX, "s3://other/"]) == [
         PODAAC_ENDPOINT
     ]
-    assert earthdata_endpoints(access, ["s3://nasa-waterinsight/NLDAS3/"]) == []
-    assert earthdata_endpoints(None, [REGISTRY_PREFIX]) == []
+    assert earthdata_endpoints(entries, ["s3://nasa-waterinsight/NLDAS3/"]) == []
+    assert earthdata_endpoints({}, [REGISTRY_PREFIX]) == []
 
 
 def _fake_earthdata_credentials() -> "icechunk.S3StaticCredentials":

@@ -173,6 +173,29 @@ def test_cache_hit_without_earthdata_endpoints_never_primes(monkeypatch):
     assert not primed
 
 
+def test_cache_entry_is_endpoints_dataset_pair(monkeypatch):
+    """The cross-process re-prime contract lives in the cache entry itself
+    — an explicit (endpoints, dataset) pair — not smuggled inside xarray
+    metadata that producers can overwrite or operations can drop."""
+    import pickle
+
+    fake = FakeRedis()
+    monkeypatch.setattr(reader, "cache_client", fake)
+    monkeypatch.setattr(reader.api_settings, "enable_cache", True)
+
+    def opener(*args, **kwargs):
+        ds = _tiny_dataset()
+        ds.encoding["earthdata_endpoints"] = [ENDPOINT]
+        return ds
+
+    monkeypatch.setattr(reader, "guess_opener", opener)
+    reader.XarrayReader("cache.zarr", "data")
+    (key,) = fake.keys()
+    endpoints, ds = pickle.loads(fake.get(key))
+    assert endpoints == [ENDPOINT]
+    assert "earthdata_endpoints" not in ds.encoding
+
+
 class _StubRepo:
     def __init__(self, url_prefixes):
         class _Container:

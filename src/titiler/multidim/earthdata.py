@@ -127,11 +127,17 @@ def _parse_secret(secret_string: str) -> dict[str, str]:
         parsed = None
     if isinstance(parsed, dict):
         known = {k: str(v) for k, v in parsed.items() if k in _ENV_KEYS and v}
-        if not known:
+        # mirror _usable_env_identity: an unpaired username or password is
+        # unusable by the environment strategy, and exporting it anyway
+        # would latch a broken identity until the secret *content* changes
+        if not (
+            known.get("EARTHDATA_TOKEN")
+            or (known.get("EARTHDATA_USERNAME") and known.get("EARTHDATA_PASSWORD"))
+        ):
             msg = (
-                "earthdata secret is a JSON object but holds no non-empty "
-                f"value under any of {', '.join(_ENV_KEYS)}; store the EDL "
-                "token as a plain string or under one of those keys"
+                "earthdata secret is a JSON object but does not form a "
+                "usable identity: it must hold a non-empty EARTHDATA_TOKEN, "
+                "or both EARTHDATA_USERNAME and EARTHDATA_PASSWORD"
             )
             raise LoginStrategyUnavailable(msg)
         return known
@@ -146,9 +152,16 @@ def _swap_env(new: dict[str, str]) -> dict[str, str]:
 
     New keys are written before stale ones are removed, so a concurrent
     reader (e.g. earthaccess-auth's environment strategy inside another
-    request thread) observes the old identity or the new one, never an
-    empty environment mid-swap.
+    request thread) never observes an *empty* environment mid-swap. The
+    per-key writes are not atomic as a set, though: a reader racing the
+    swap can briefly see a mixed identity (e.g. new username with the old
+    password), failing that one request with a transient login error that
+    self-heals on the next.
     """
+    # ponytail: per-key os.environ writes; true atomicity would need every
+    # reader to take a shared lock, which earthaccess-auth's env strategy
+    # doesn't — acceptable because the mixed window is a few instructions
+    # wide and the failure mode is one transient, self-healing 500
     old = {k: os.environ[k] for k in _ENV_KEYS if k in os.environ}
     os.environ.update(new)
     for key in _ENV_KEYS:
@@ -187,9 +200,11 @@ def ensure_earthdata_credentials() -> None:
     ``EARTHDATA_USERNAME`` / ``EARTHDATA_PASSWORD`` (the username/password
     shape matches titiler-cmr's deployments, so the two services can share
     one secret). The secret is re-read every ``_REFRESH_INTERVAL`` seconds
-    so rotation needs neither a redeploy nor a restart. A failed fetch on
-    the *first* load is retried on the next call instead of poisoning the
-    process. A failure while *refreshing* an already-loaded identity —
+    so rotation needs neither a redeploy nor a restart. A failed *first*
+    load raises, then backs off ``_RETRY_INTERVAL`` — calls inside the
+    window return without fetching (credential use then fails downstream
+    with a typed, sanitized error) instead of hammering Secrets Manager on
+    every request. A failure while *refreshing* an already-loaded identity —
     whether fetching the secret, parsing it, or logging the rotated
     credentials in — does not fail the request either: the warm identity
     (exported env vars plus the default auth manager built around them) is
@@ -208,17 +223,17 @@ def ensure_earthdata_credentials() -> None:
     with _lock:
         if _next_refresh is not None and time.monotonic() < _next_refresh:
             return
-        if _last_secret is None and _usable_env_identity():
-            # ambient identity supplied by the operator, not by us: never
-            # fetch the secret, never touch these variables again
-            _next_refresh = math.inf
+        arn = _secret_arn_unless_latched()
+        if arn is None:
             return
-        from titiler.multidim.settings import ApiSettings
-
-        arn = ApiSettings().earthdata_secret_arn
-        if not arn:
-            _next_refresh = math.inf
-            return
+        refreshing = _last_secret is not None
+        if refreshing:
+            # push the deadline before the network call so concurrent
+            # requests take the pre-lock fast path on the still-valid warm
+            # identity instead of queueing behind a (possibly hung) Secrets
+            # Manager call; success below replaces this with the full
+            # interval, and a failure keeps it as the retry backoff
+            _next_refresh = time.monotonic() + _RETRY_INTERVAL
         try:
             response = _secrets_client(arn).get_secret_value(SecretId=arn)
         except Exception as e:
@@ -231,17 +246,16 @@ def ensure_earthdata_credentials() -> None:
                 arn,
                 e,
             )
-            if _last_secret is not None:
-                # a valid identity is already exported and the default auth
-                # manager is built around it (EDL tokens live ~60 days), so
-                # a transient failure while refreshing must not fail live
-                # requests; retry sooner than a full refresh interval
-                # without hammering Secrets Manager on every request
-                _next_refresh = time.monotonic() + _RETRY_INTERVAL
+            if refreshing:
+                # the warm identity keeps serving (EDL tokens live ~60
+                # days); the deadline pushed above is the retry backoff
                 return
-            # first load: nothing usable is exported yet, so there is no
-            # identity to fall back to; _next_refresh is left unset so the
-            # next request retries instead of failing forever
+            # first load: nothing to fall back to. Back off the same way so
+            # a misconfigured deployment doesn't turn every request into a
+            # GetSecretValue call serialized on this lock; requests inside
+            # the window return without credentials and fail fast
+            # downstream with a typed, sanitized error
+            _next_refresh = time.monotonic() + _RETRY_INTERVAL
             msg = (
                 "failed to load Earthdata Login credentials from the "
                 "configured secret; see the service logs for details"
@@ -249,13 +263,40 @@ def ensure_earthdata_credentials() -> None:
             raise LoginStrategyUnavailable(msg) from e
         secret = response["SecretString"]
         if secret != _last_secret:
-            if not _apply_secret(secret, rotating=_last_secret is not None):
+            try:
+                applied = _apply_secret(secret, rotating=refreshing)
+            except LoginStrategyUnavailable:
+                # unusable first secret: same backoff as a failed first fetch
+                _next_refresh = time.monotonic() + _RETRY_INTERVAL
+                raise
+            if not applied:
                 # a refresh failure must not fail requests: the previous
                 # identity keeps serving, retry sooner than a full interval
                 _next_refresh = time.monotonic() + _RETRY_INTERVAL
                 return
             _last_secret = secret
         _next_refresh = time.monotonic() + _REFRESH_INTERVAL
+
+
+def _secret_arn_unless_latched() -> str | None:
+    """Return the configured secret ARN, or None after latching.
+
+    Latches ``_next_refresh`` permanently (returning None) when the
+    operator supplied a usable ambient identity — never fetch the secret,
+    never touch those variables again — or when no ARN is configured.
+    Call with ``_lock`` held.
+    """
+    global _next_refresh
+    if _last_secret is None and _usable_env_identity():
+        _next_refresh = math.inf
+        return None
+    from titiler.multidim.settings import ApiSettings
+
+    arn = ApiSettings().earthdata_secret_arn
+    if not arn:
+        _next_refresh = math.inf
+        return None
+    return arn
 
 
 def _apply_secret(secret: str, rotating: bool) -> bool:

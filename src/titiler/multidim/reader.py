@@ -27,6 +27,7 @@ from titiler.multidim.chunk_access import (
     ChunkAccessMapping,
     build_virtual_chunk_access,
     earthdata_endpoints,
+    parse_chunk_access,
 )
 from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
@@ -42,7 +43,10 @@ def opener_icechunk(
     authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
-    credentials = build_virtual_chunk_access(authorize_virtual_chunk_access)
+    # parse once; build_virtual_chunk_access and earthdata_endpoints both
+    # consume the parsed models
+    entries = parse_chunk_access(authorize_virtual_chunk_access)
+    credentials = build_virtual_chunk_access(entries)
 
     # TODO: For future opener development. This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
     parsed = urlparse(src_path)
@@ -70,7 +74,7 @@ def opener_icechunk(
     )
     containers = repo.config.virtual_chunk_containers or {}
     endpoints = earthdata_endpoints(
-        authorize_virtual_chunk_access,
+        entries,
         (container.url_prefix for container in containers.values()),
     )
     if endpoints:
@@ -235,12 +239,11 @@ class XarrayReader(Reader):
         if api_settings.enable_cache:
             data_bytes = cache_client.get(cache_key)
             if data_bytes:
-                ds = pickle.loads(data_bytes)
-                endpoints = ds.encoding.get("earthdata_endpoints")
+                endpoints, ds = pickle.loads(data_bytes)
                 if endpoints:
                     # the unpickled dataset carries a refreshable credential
                     # callable that resolves through default_manager() in
-                    # *this* process; the opener recorded which endpoints it
+                    # *this* process; the entry records which endpoints it
                     # needs, so re-prime exactly those (typed EULA/login
                     # errors surface here instead of opaquely in Rust)
                     from titiler.multidim.earthdata import (
@@ -253,7 +256,12 @@ class XarrayReader(Reader):
         ds = guess_opener(src_path, **kwargs)
 
         if api_settings.enable_cache:
-            cache_client.set(cache_key, pickle.dumps(ds), ex=300)
+            # the cache entry is an explicit (endpoints, dataset) pair: the
+            # cross-process re-prime contract lives in the cache layer, not
+            # inside xarray metadata (the opener's encoding slot is only the
+            # in-process handoff, popped here)
+            endpoints = ds.encoding.pop("earthdata_endpoints", None)
+            cache_client.set(cache_key, pickle.dumps((endpoints, ds)), ex=300)
 
         return ds
 

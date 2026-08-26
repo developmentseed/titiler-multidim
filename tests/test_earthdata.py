@@ -241,7 +241,9 @@ def test_stale_unusable_env_key_does_not_shadow_secret(monkeypatch):
 
 
 def test_fetch_failure_does_not_latch(monkeypatch):
-    """A failed fetch must be retried on the next request, not cached forever."""
+    """A failed fetch must be retried once the backoff expires, not cached
+    forever."""
+    from titiler.multidim import earthdata
     from titiler.multidim.earthdata import ensure_earthdata_credentials
 
     monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
@@ -251,11 +253,101 @@ def test_fetch_failure_does_not_latch(monkeypatch):
         ensure_earthdata_credentials()
     client.error = None
     client.secret_string = "tok"
+    monkeypatch.setattr(earthdata, "_next_refresh", 0.0)  # backoff elapsed
     ensure_earthdata_credentials()
     import os
 
     assert os.environ["EARTHDATA_TOKEN"] == "tok"
     assert client.requested == [ARN, ARN]
+
+
+def test_first_load_fetch_failure_backs_off(monkeypatch):
+    """A failing first load must not become a per-request Secrets Manager
+    storm (the refresh path already backs off): within the retry window,
+    later requests fail fast without another GetSecretValue."""
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(error=RuntimeError("AccessDeniedException"))
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable):
+        ensure_earthdata_credentials()
+    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert client.requested == [ARN]
+
+
+def test_first_load_unusable_secret_backs_off(monkeypatch):
+    """An unusable first secret gets the same backoff as a failed fetch."""
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string=json.dumps({"UNRELATED": "nope"}))
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable):
+        ensure_earthdata_credentials()
+    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert client.requested == [ARN]
+
+
+def test_partial_identity_secret_raises(monkeypatch):
+    """USERNAME without PASSWORD (or vice versa) is unusable by
+    earthaccess-auth's environment strategy; exporting it anyway would
+    latch a broken identity until the secret *content* changes, failing
+    every request with a misleading error. Fail fast at parse instead."""
+    import os
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(secret_string=json.dumps({"EARTHDATA_USERNAME": "u"}))
+    _install(monkeypatch, client)
+    with pytest.raises(LoginStrategyUnavailable, match="EARTHDATA_"):
+        ensure_earthdata_credentials()
+    assert "EARTHDATA_USERNAME" not in os.environ
+
+
+def test_token_with_partial_pair_is_usable(monkeypatch):
+    """A usable token plus an unpaired username is fine: the token wins."""
+    import os
+
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    client = StubSecretsClient(
+        secret_string=json.dumps({"EARTHDATA_TOKEN": "t", "EARTHDATA_USERNAME": "u"})
+    )
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()
+    assert os.environ["EARTHDATA_TOKEN"] == "t"
+
+
+def test_refresh_bumps_deadline_before_network_call(monkeypatch):
+    """During a refresh fetch, concurrent requests must serve on the warm
+    identity via the pre-lock fast path instead of queueing behind the
+    Secrets Manager call: the deadline is pushed before the network I/O
+    starts."""
+    import time
+
+    from titiler.multidim import earthdata
+    from titiler.multidim.earthdata import ensure_earthdata_credentials
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+
+    observed = []
+
+    class ObservingClient(StubSecretsClient):
+        def get_secret_value(self, SecretId):
+            observed.append((earthdata._next_refresh, time.monotonic()))
+            return super().get_secret_value(SecretId)
+
+    client = ObservingClient(secret_string="tok")
+    _install(monkeypatch, client)
+    ensure_earthdata_credentials()  # first load
+
+    monkeypatch.setattr(earthdata, "_next_refresh", 0.0)
+    ensure_earthdata_credentials()  # refresh
+    deadline_at_fetch, now_at_fetch = observed[1]
+    assert deadline_at_fetch is not None and deadline_at_fetch > now_at_fetch
 
 
 def test_refresh_failure_keeps_serving_warm_identity(monkeypatch, caplog):
