@@ -74,7 +74,7 @@ def _rebuild_default_auth() -> None:
     they call default_manager() at module level, not a captured instance.
     """
     from earthaccess_auth.auth import Auth
-    from earthaccess_auth.credentials import set_default_auth
+    from earthaccess_auth.credentials import S3CredentialManager, set_default_manager
 
     try:
         auth = Auth()
@@ -94,20 +94,26 @@ def _rebuild_default_auth() -> None:
     if not auth.authenticated:
         msg = "earthdata secret did not yield a usable EDL identity"
         raise LoginStrategyUnavailable(msg)
-    _probe_identity(auth)
-    set_default_auth(auth)
+    manager = S3CredentialManager(auth)
+    # probe through the manager that gets installed, so a successful probe
+    # warms the very cache prime_earthdata_endpoints and icechunk's refresh
+    # callable read — one s3credentials fetch per cold process, not two
+    _probe_identity(manager)
+    set_default_manager(manager)
 
 
-def _probe_identity(auth) -> None:
+def _probe_identity(manager) -> None:
     """Reject an identity a DAAC definitively refuses (HTTP 401).
 
     EDL marks any non-empty token authenticated without a network call, so
     a rotated-to-garbage token would otherwise install and latch (the
     unchanged secret then short-circuits every later refresh). Probe one
-    configured earthdata endpoint: only a 401 rejects the identity — an
-    unaccepted EULA (403), a DAAC outage, an older earthaccess-auth
-    without status_code, or no configured earthdata entries are not
-    evidence the credentials are bad.
+    configured earthdata endpoint through `manager` (an
+    S3CredentialManager wrapping the candidate identity): only a 401
+    rejects it — an unaccepted EULA (403), a DAAC outage, an older
+    earthaccess-auth without status_code, or no configured earthdata
+    entries are not evidence the credentials are bad. A successful probe
+    leaves the credentials cached in `manager`.
 
     Raises:
         LoginStrategyUnavailable: On a definitive 401 (sanitized; the
@@ -116,11 +122,10 @@ def _probe_identity(auth) -> None:
     endpoints = _configured_earthdata_endpoints()
     if not endpoints:
         return
-    from earthaccess_auth.credentials import fetch_s3_credentials
     from earthaccess_auth.exceptions import S3CredentialsRequestFailure
 
     try:
-        fetch_s3_credentials(auth, endpoints[0])
+        manager.get_credentials(endpoints[0])
     except S3CredentialsRequestFailure as e:
         if getattr(e, "status_code", None) == 401:
             logger.error("earthdata secret credentials were rejected: %s", e)

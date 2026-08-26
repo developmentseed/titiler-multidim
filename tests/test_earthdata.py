@@ -444,7 +444,7 @@ def test_load_and_rotation_rebuild_manager(monkeypatch):
 
     monkeypatch.setattr("earthaccess_auth.auth.Auth", StubAuth)
     monkeypatch.setattr(
-        "earthaccess_auth.credentials.set_default_auth", installed.append
+        "earthaccess_auth.credentials.set_default_manager", installed.append
     )
 
     ensure_earthdata_credentials()
@@ -452,7 +452,7 @@ def test_load_and_rotation_rebuild_manager(monkeypatch):
 
     assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"
     assert len(installed) == 1  # first load installs the secret's identity
-    assert isinstance(installed[0], StubAuth)
+    assert isinstance(installed[0]._auth, StubAuth)
 
     # within the interval: no re-fetch
     ensure_earthdata_credentials()
@@ -475,7 +475,7 @@ def test_unchanged_secret_recheck_does_not_rebuild(monkeypatch):
     _install(monkeypatch, client)
     installed = []
     monkeypatch.setattr(
-        "earthaccess_auth.credentials.set_default_auth", installed.append
+        "earthaccess_auth.credentials.set_default_manager", installed.append
     )
     ensure_earthdata_credentials()
     assert len(installed) == 1  # first load
@@ -645,6 +645,44 @@ def test_rotation_to_rejected_token_rolls_back(monkeypatch):
     assert os.environ["EARTHDATA_TOKEN"] == "tok-v1"  # rolled back
     ensure_earthdata_credentials()  # backed off
     assert len(client.requested) == 2
+
+
+def test_probe_warms_the_credential_cache(monkeypatch):
+    """The identity probe must not be a throwaway request: its result lands
+    in the installed manager's per-endpoint cache, so priming (and
+    icechunk's refresh callable) reuse it — one s3credentials fetch per
+    cold process, not two."""
+    from datetime import UTC, datetime, timedelta
+
+    from earthaccess_auth.credentials import S3Credentials
+    from earthaccess_auth.daac import resolve_bucket
+
+    from titiler.multidim.earthdata import (
+        ensure_earthdata_credentials,
+        prime_earthdata_endpoints,
+    )
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    monkeypatch.setenv("TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS", EARTHDATA_ACCESS_ENV)
+    client = StubSecretsClient(secret_string="tok-v1")
+    _install(monkeypatch, client)
+
+    fetches = []
+
+    def fetch(auth, endpoint):
+        fetches.append(endpoint)
+        return S3Credentials(
+            access_key_id="ak",
+            secret_access_key="sk",
+            session_token="st",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+    monkeypatch.setattr("earthaccess_auth.credentials.fetch_s3_credentials", fetch)
+    ensure_earthdata_credentials()  # first load: the probe fetches once
+    endpoint = resolve_bucket("s3://podaac-ops-cumulus-protected/MUR/").endpoint
+    prime_earthdata_endpoints([endpoint])
+    assert fetches == [endpoint]  # priming hit the probe-warmed cache
 
 
 def test_probe_eula_403_does_not_reject_rotation(monkeypatch):
