@@ -148,6 +148,10 @@ To run the same deployment smoke test manually:
 uv run python scripts/test_deployment.py --api-url https://your-api.execute-api.us-west-2.amazonaws.com
 ```
 
+For manual checks beyond the automated tiles — the TEMPO earthdata path,
+its failure modes, and the map viewer — see
+[docs/manual-smoke-testing.md](docs/manual-smoke-testing.md).
+
 The RASI historical Icechunk store is intentionally excluded because its source data are corrupted.
 
 ## New Deployments
