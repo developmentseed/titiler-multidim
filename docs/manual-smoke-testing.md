@@ -51,6 +51,11 @@ TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
    `airquality-data-store-develop`, or the store prefix has graduated past
    `v04-trial`), not an EDL problem.
 
+   `/variables` is the one endpoint that never uses the Redis dataset
+   cache, so it fails first when a store moves or permissions change while
+   `/tiles` and `/info` are still being served from a warm entry. If they
+   disagree, `GET $API_URL/clear_cache` and re-check.
+
 2. **A tile** — needs the whole chain:
 
    ```bash
@@ -89,9 +94,108 @@ you whose problem it is.
 | `500` "Authentication with Earthdata Login failed" | EDL itself rejected the login (bad username/password secret, EDL outage) | Check the secret's contents and EDL status |
 | `500` "icechunk storage error" | The store itself couldn't be read | Check reader-role S3 permissions and the store prefix |
 | Metadata works but every tile fails | Chunk-read-time credential refresh is failing while store metadata (read with ambient IAM) still works | Same 403/500 triage as above — the wrapped error keeps the status distinction |
+| `500` "File format identification for extension  is not implemented" (note the empty extension) | Nothing was found at the url: `identify_storage_backend` listed the prefix, got zero objects, and fell back to treating it as a single file | Fix the url, or check the store prefix still exists — this is never a format problem |
+| `500` "no non-interactive EDL login strategy available" | The Lambda has no `TITILER_MULTIDIM_EARTHDATA_SECRET_ARN`, so credential loading is a permanent no-op — or the first secret fetch failed and this request landed in the 60s retry window | Check the deployed env var (below); if it is set, look for `could not read the earthdata secret` in the logs and treat it as a `GetSecretValue` failure |
 
 Details in the response bodies are intentionally generic; the specifics
 (raw DAAC responses, endpoints) are in the Lambda's CloudWatch logs.
+
+## Checking the reader role's permissions
+
+The Lambda runs as an externally managed role imported with
+`mutable=False` (`infrastructure/aws/cdk/app.py`), so CDK cannot grant it
+anything — every permission must already exist on the role before the
+deploy. Two grants matter:
+
+- `secretsmanager:GetSecretValue` on the EDL secret (plus `kms:Decrypt`
+  if it is encrypted with a CMK)
+- `s3:ListBucket` and `s3:GetObject` on the icechunk store bucket
+
+The role does **not** need access to `asdc-prod-protected`: those are the
+virtual chunk reads, and they use the DAAC temporary credentials from the
+`s3credentials` exchange, not ambient IAM. Only the store bucket is read
+with the role (`from_env=True` in `opener_icechunk`).
+
+Start from what is actually deployed rather than the GitHub Actions
+variables:
+
+```bash
+FN=<function-name>
+ROLE=$(aws lambda get-function-configuration --function-name "$FN" --query Role --output text)
+SECRET=$(aws lambda get-function-configuration --function-name "$FN" \
+  --query 'Environment.Variables.TITILER_MULTIDIM_EARTHDATA_SECRET_ARN' --output text)
+```
+
+A `None` for `$SECRET` is itself the answer to a
+`no non-interactive EDL login strategy available` failure: the stack was
+synthesized without `TITILER_MULTIDIM_EARTHDATA_SECRET_ARN` (an unset
+`vars.EARTHDATA_SECRET_ARN` expands to an empty string, and
+`StackSettings.model_post_init` then omits the variable entirely). Set the
+Actions variable and redeploy; the ARN is read lazily per request, so
+nothing else needs clearing.
+
+### Assume the role and try it
+
+The only check that covers identity policy, bucket policy, KMS key policy
+and SCPs together:
+
+```bash
+CREDS=$(aws sts assume-role --role-arn "$ROLE" --role-session-name perm-check --query Credentials)
+export AWS_ACCESS_KEY_ID=$(jq -r .AccessKeyId <<<"$CREDS") \
+       AWS_SECRET_ACCESS_KEY=$(jq -r .SecretAccessKey <<<"$CREDS") \
+       AWS_SESSION_TOKEN=$(jq -r .SessionToken <<<"$CREDS")
+
+# secret + KMS, in the secret's own region (what _secrets_client does)
+aws secretsmanager get-secret-value --secret-id "$SECRET" \
+  --region "$(cut -d: -f4 <<<"$SECRET")" --query ARN
+
+# ListBucket — the exact call identify_storage_backend makes
+aws s3api list-objects-v2 --bucket airquality-data-store-develop \
+  --prefix tempo/ --max-keys 3 --query 'Contents[].Key'
+
+# GetObject, on a real key from the listing above
+aws s3api head-object --bucket airquality-data-store-develop --key <key-from-above>
+```
+
+An `AccessDenied` names the missing action; a missing `kms:Decrypt`
+surfaces on the first call as an `AccessDeniedException` mentioning KMS
+rather than Secrets Manager. `unset AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN` when done.
+
+### When the trust policy won't let you assume it
+
+```bash
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names secretsmanager:GetSecretValue --resource-arns "$SECRET" \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names s3:ListBucket --resource-arns arn:aws:s3:::airquality-data-store-develop \
+  --context-entries ContextKeyName=s3:prefix,ContextKeyType=string,ContextKeyValues=tempo/ \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
+  --action-names s3:GetObject --resource-arns 'arn:aws:s3:::airquality-data-store-develop/tempo/x' \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+```
+
+The resource ARN shapes differ — a **bucket** ARN for `ListBucket`, an
+**object** ARN for `GetObject`; simulating `ListBucket` against an object
+ARN returns a meaningless `implicitDeny`. And `allowed` here is not proof:
+the simulator reads identity policies only, so it cannot see a bucket
+policy `Deny` or a KMS key policy that omits the role.
+
+### Is the secret even on a CMK?
+
+```bash
+aws secretsmanager describe-secret --secret-id "$SECRET" --query KmsKeyId
+```
+
+`null` or `alias/aws/secretsmanager` means the AWS-managed key —
+`GetSecretValue` alone is enough. Any other key id is a CMK, and the role
+needs both `kms:Decrypt` and an entry in the key policy
+(`aws kms get-key-policy --key-id <id> --policy-name default`), usually
+gated on `kms:ViaService=secretsmanager.<region>.amazonaws.com`.
 
 ## Freshness (expected behavior, not a bug)
 
