@@ -235,3 +235,33 @@ def test_mosaic_url_limits_and_variable_mismatch(app, sources, tmp_path):
     assert (
         app.get("/variables", params=[("url", str(left)), ("url", str(mismatched))])
     ).status_code == 400
+
+
+
+def test_histogram_supports_antimeridian_sources(app, tmp_path):
+    """Histogram pools values from both sides of the antimeridian."""
+    west = tmp_path / "am-west.nc"
+    east = tmp_path / "am-east.nc"
+    write_dataset(west, 1, x=(172.5, 177.5))
+    write_dataset(east, 2, x=(-177.5, -172.5))
+
+    response = app.get(
+        "/histogram",
+        params=[("url", str(west)), ("url", str(east)), ("variable", "data")],
+    )
+    assert response.status_code == 200
+    histogram = response.json()
+    assert sum(bucket["value"] for bucket in histogram) > 0
+    assert histogram[0]["bucket"][0] == 1.0
+    assert histogram[-1]["bucket"][1] == 2.0
+
+    projected = tmp_path / "am-projected.nc"
+    write_antimeridian_dataset(projected)
+    response = app.get(
+        "/histogram", params=[("url", str(projected)), ("variable", "data")]
+    )
+    assert response.status_code == 200
+    histogram = response.json()
+    assert sum(bucket["value"] for bucket in histogram) > 0
+    assert histogram[0]["bucket"][0] == 0.5
+    assert histogram[-1]["bucket"][1] == 1.5

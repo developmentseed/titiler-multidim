@@ -89,7 +89,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
             reader_params=Depends(self.reader_dependency),
             show_times: Annotated[
                 bool | None,
-                Query(description="Show info about the time dimension"),
+                Query(description="Show info about the time dimension (only available for single URLs"),
             ] = None,
         ):
             """Return native source info or aggregate mosaic info."""
@@ -278,12 +278,21 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
                 reader=self.dataset_reader,
                 reader_options=reader_params.as_dict(),
             ) as src:
-                image, _ = src.part(
-                    src.bounds,
-                    pixel_selection=pixel_selection,
-                    threads=MOSAIC_THREADS,
-                )
-                values = image.array.compressed()
+                # Antimeridian-crossing mosaics report wrapped bounds
+                # (west > east), which part() cannot window; read each side
+                # of the dateline separately and pool the unmasked values.
+                west, south, east, north = src.bounds
+                values = np.concatenate(
+                    [
+                        src.part(
+                            (interval_west, south, interval_east, north),
+                            pixel_selection=pixel_selection,
+                            threads=MOSAIC_THREADS,
+                        )[0].array.compressed()
+                        for interval_west, interval_east in src._longitude_intervals(
+                            west, east
+                        )
+                    ]
 
             counts, edges = np.histogram(values, bins=10)
 

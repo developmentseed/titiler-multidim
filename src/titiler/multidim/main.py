@@ -14,6 +14,7 @@ from titiler.core.middleware import (
     LoggerMiddleware,
     TotalTimeMiddleware,
 )
+from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 
 from titiler.multidim import __version__ as titiler_version
 from titiler.multidim.extensions import DatasetMetadataExtension
@@ -71,6 +72,7 @@ error_codes = {
 }
 add_exception_handlers(app, error_codes)
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
+add_exception_handlers(app, MOSAIC_STATUS_CODES)
 
 # Set all CORS enabled origins
 if api_settings.cors_origins:
