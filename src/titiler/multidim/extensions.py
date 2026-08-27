@@ -15,14 +15,10 @@ from titiler.multidim.reader import api_settings, guess_opener
 
 
 def DatasetMetadataPathParams(
-    url: list[str] = Query(
-        min_length=1,
-        max_length=1,
-        description="One Xarray dataset URL.",
-    ),
+    url: str = Query(description="One Xarray dataset URL."),
 ) -> str:
-    """Return the single source URL accepted by dataset metadata endpoints."""
-    return url[0]
+    """Return the source URL accepted by dataset metadata endpoints."""
+    return url
 
 
 def open_metadata_dataset(src_path: str, **kwargs: Any) -> xr.Dataset:

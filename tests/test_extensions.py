@@ -28,11 +28,11 @@ def test_dataset_metadata_extension_uses_one_url(app):
 @pytest.mark.parametrize(
     "path", ["/dataset/", "/dataset/dict", "/dataset/keys", "/validate"]
 )
-def test_dataset_metadata_extension_rejects_multiple_urls(app, path):
-    """Dataset metadata routes do not invent multi-source metadata."""
-    response = app.get(
-        path,
-        params=[("url", "tests/fixtures/testfile.nc")] * 2,
+def test_dataset_metadata_extension_documents_a_single_url(app, path):
+    """Dataset metadata routes expose url as a scalar query parameter."""
+    parameters = app.get("/api").json()["paths"][path]["get"]["parameters"]
+    url_parameter = next(
+        parameter for parameter in parameters if parameter["name"] == "url"
     )
 
-    assert response.status_code == 422
+    assert url_parameter["schema"]["type"] == "string"
