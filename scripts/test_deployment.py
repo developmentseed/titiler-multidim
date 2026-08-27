@@ -43,6 +43,21 @@ TEST_CASES = (
         },
     ),
     (
+        # the one case that exercises the earthdata path: Secrets Manager
+        # secret -> EDL login -> identity probe -> s3credentials -> virtual
+        # chunk reads from asdc-prod-protected
+        "virtual TEMPO NO2 Icechunk (earthdata auth)",
+        "4/3/6",
+        {
+            "url": "s3://airquality-data-store-develop/tempo/no2/v04-trial",
+            "variable": "vertical_column_troposphere",
+            "sel": "time=2026-08-24T15:40:44",
+            "sel_method": "nearest",
+            "rescale": "0,1.5e16",
+            "colormap_name": "viridis",
+        },
+    ),
+    (
         "MUR SST zarr",
         "5/8/13",
         {
