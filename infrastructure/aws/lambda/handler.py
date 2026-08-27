@@ -261,7 +261,6 @@ if "AWS_EXECUTION_ENV" in os.environ and api_settings.telemetry_enabled:
     propagate.set_global_textmap(_LambdaXRayPropagator())
 
     LoggingInstrumentor().instrument(set_logging_format=True)
-    # HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
 
 # ── SnapStart pre-warming ──────────────────────────────────────────────────────
