@@ -89,7 +89,9 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
             reader_params=Depends(self.reader_dependency),
             show_times: Annotated[
                 bool | None,
-                Query(description="Show info about the time dimension (only available for single URLs"),
+                Query(
+                    description="Show info about the time dimension (only available for single URLs"
+                ),
             ] = None,
         ):
             """Return native source info or aggregate mosaic info."""
@@ -293,6 +295,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
                             west, east
                         )
                     ]
+                )
 
             counts, edges = np.histogram(values, bins=10)
 

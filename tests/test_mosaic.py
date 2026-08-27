@@ -218,6 +218,17 @@ def test_mosaic_endpoints_preserve_shapes_and_compose_data(app, sources):
     assert histogram.json()[0]["bucket"][0] == 1.5
 
 
+def test_tile_outside_mosaic_returns_no_content(app, sources):
+    """A tile outside all requested sources returns no content."""
+    left, right, _, _ = sources
+    response = app.get(
+        "/tiles/WebMercatorQuad/2/0/0.png",
+        params=[("url", str(left)), ("url", str(right)), ("variable", "data")],
+    )
+
+    assert response.status_code == 204
+
+
 def test_mosaic_url_limits_and_variable_mismatch(app, sources, tmp_path):
     """The API validates URL cardinality and common variable namespaces."""
     left, _, _, _ = sources
@@ -235,7 +246,6 @@ def test_mosaic_url_limits_and_variable_mismatch(app, sources, tmp_path):
     assert (
         app.get("/variables", params=[("url", str(left)), ("url", str(mismatched))])
     ).status_code == 400
-
 
 
 def test_histogram_supports_antimeridian_sources(app, tmp_path):
