@@ -60,7 +60,7 @@ TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
 
    ```bash
    curl -so /tmp/tempo.png -w '%{http_code} %{content_type}\n' \
-     "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=$TEMPO&variable=vertical_column_troposphere&sel=time=2026-08-24T15:40:44&sel_method=nearest&rescale=0,1.5e16&colormap_name=viridis"
+     "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=$TEMPO&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44&rescale=0,1.5e16&colormap_name=viridis"
    ```
 
    Expect `200 image/png`. The first request on a cold Lambda is the slow
@@ -70,13 +70,13 @@ TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
 3. **A point value** — same chain, different read path:
 
    ```bash
-   curl -sf "$API_URL/point/-95,35?url=$TEMPO&variable=vertical_column_troposphere&sel=time=2026-08-24T15:40:44&sel_method=nearest"
+   curl -sf "$API_URL/point/-95,35?url=$TEMPO&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44"
    ```
 
 4. **Look at it** — open the map viewer in a browser:
 
    ```text
-   $API_URL/WebMercatorQuad/map.html?url=s3://airquality-data-store-develop/tempo/no2/v04-trial&variable=vertical_column_troposphere&sel=time=2026-08-24T15:40:44&sel_method=nearest&rescale=0,1.5e16&colormap_name=viridis
+   $API_URL/WebMercatorQuad/map.html?url=s3://airquality-data-store-develop/tempo/no2/v04-trial&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44&rescale=0,1.5e16&colormap_name=viridis
    ```
 
    TEMPO covers North America; pan there. Tiles outside the scan's swath

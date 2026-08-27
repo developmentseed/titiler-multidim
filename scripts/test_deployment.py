@@ -51,8 +51,7 @@ TEST_CASES = (
         {
             "url": "s3://airquality-data-store-develop/tempo/no2/v04-trial",
             "variable": "vertical_column_troposphere",
-            "sel": "time=2026-08-24T15:40:44",
-            "sel_method": "nearest",
+            "sel": "time=nearest::2026-08-24T15:40:44",
             "rescale": "0,1.5e16",
             "colormap_name": "viridis",
         },
