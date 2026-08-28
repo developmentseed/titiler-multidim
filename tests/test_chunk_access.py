@@ -164,7 +164,6 @@ def test_settings_instantiated_at_import(monkeypatch):
     # the deploy-gate property behind fail-fast validation: ApiSettings() must
     # run at module import time, so an invalid config (rejected by the test
     # above) fails startup instead of the first request
-    monkeypatch.setenv("TEST_ENVIRONMENT", "1")
     monkeypatch.delenv("TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS", raising=False)
     from titiler.multidim import main
 

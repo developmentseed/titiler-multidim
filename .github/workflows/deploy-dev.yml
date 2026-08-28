@@ -24,10 +24,7 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'deploy-dev'))
     env:
       UV_PYTHON: 3.12
-      CDK_DEFAULT_ACCOUNT: ${{ vars.CDK_DEFAULT_ACCOUNT }}
-      CDK_DEFAULT_REGION: ${{ vars.CDK_DEFAULT_REGION }}
       STAGE: ${{ vars.STAGE }}
-      VPC_ID: ${{ vars.VPC_ID }}
       TITILER_MULTIDIM_PYTHONWARNINGS: ignore
       TITILER_MULTIDIM_DEBUG: true
       TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}

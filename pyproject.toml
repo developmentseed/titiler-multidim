@@ -38,7 +38,6 @@ dependencies = [
     "obstore>=0.9.4",
     "pydantic-settings~=2.14",
     "pydantic>=2.13.3,<3.0",
-    "redis",
     "requests",
     "rioxarray",
     "s3fs",
@@ -66,7 +65,6 @@ lambda = [
 [dependency-groups]
 dev = [
     "dask>=2026.3.0",
-    "fakeredis>=2.35.1",
     "httpx2",
     "ipykernel>=7.2.0",
     "ipython>=9.13.0",
