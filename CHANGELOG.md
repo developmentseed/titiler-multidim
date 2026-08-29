@@ -4,6 +4,21 @@
 
 * nothing
 
+## [0.8.0](https://github.com/developmentseed/titiler-multidim/compare/v0.7.2...v0.8.0) (2026-08-29)
+
+
+### Features
+
+* enable multiple sources, render as a mosaic ([#140](https://github.com/developmentseed/titiler-multidim/issues/140)) ([188c724](https://github.com/developmentseed/titiler-multidim/commit/188c7249361417e02fc316c70bbbfe7282fe6152))
+* remove Redis cache and VPC ([#149](https://github.com/developmentseed/titiler-multidim/issues/149)) ([b784516](https://github.com/developmentseed/titiler-multidim/commit/b7845164abd81b845c28360fa19f3d573cd9069c))
+* typed, opt-in configuration for icechunk virtual chunk access ([#146](https://github.com/developmentseed/titiler-multidim/issues/146)) ([4d1c305](https://github.com/developmentseed/titiler-multidim/commit/4d1c305130b2a60a45e328da4ff52c68174ab6a7))
+* upgrade to titiler 2.2 ([#137](https://github.com/developmentseed/titiler-multidim/issues/137)) ([c17dfa7](https://github.com/developmentseed/titiler-multidim/commit/c17dfa7db43d26ae3e823181fe96227a29605f9e))
+
+
+### Bug Fixes
+
+* stop CDNs from caching error responses ([#148](https://github.com/developmentseed/titiler-multidim/issues/148)) ([1798f2e](https://github.com/developmentseed/titiler-multidim/commit/1798f2e183e2a1bc5fdb9c94e2f98ce44b580628))
+
 ## [0.7.2](https://github.com/developmentseed/titiler-multidim/compare/v0.7.1...v0.7.2) (2026-05-11)
 
 
