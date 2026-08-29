@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import pickle
 import time
 from typing import (
     Any,
@@ -23,11 +22,9 @@ from obstore.auth.boto3 import Boto3CredentialProvider
 from titiler.xarray.io import Reader, xarray_open_dataset
 
 from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
-from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
-cache_client = get_redis()
 logger = logging.getLogger(__name__)
 
 
@@ -209,12 +206,12 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
 
 @attr.s
 class XarrayReader(Reader):
-    """Custom XarrayReader with redis cache"""
+    """Custom XarrayReader with Icechunk and virtual chunk support."""
 
     def __attrs_post_init__(self):
-        """Configure the cached opener before the parent reads the dataset."""
+        """Configure the custom opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
-        self.opener = self._open_cached
+        self.opener = guess_opener
         log_path = _log_path(self.src_path)
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
@@ -224,40 +221,6 @@ class XarrayReader(Reader):
             log_path,
             time.monotonic() - started_at,
         )
-
-    def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
-        """Open a dataset, reusing its Redis cache entry when enabled."""
-        cache_key = (
-            f"{src_path}_group:{kwargs.get('group')}_time:{kwargs.get('decode_times')}"
-        )
-
-        log_path = _log_path(src_path)
-        if api_settings.enable_cache:
-            logger.info("Reading dataset cache: source=%s", log_path)
-            started_at = time.monotonic()
-            data_bytes = cache_client.get(cache_key)
-            logger.info(
-                "Read dataset cache: source=%s hit=%s elapsed_seconds=%.2f",
-                log_path,
-                bool(data_bytes),
-                time.monotonic() - started_at,
-            )
-            if data_bytes:
-                return pickle.loads(data_bytes)
-
-        ds = guess_opener(src_path, **kwargs)
-
-        if api_settings.enable_cache:
-            logger.info("Writing dataset cache: source=%s", log_path)
-            started_at = time.monotonic()
-            cache_client.set(cache_key, pickle.dumps(ds), ex=300)
-            logger.info(
-                "Wrote dataset cache: source=%s elapsed_seconds=%.2f",
-                log_path,
-                time.monotonic() - started_at,
-            )
-
-        return ds
 
     @classmethod
     def list_variables(

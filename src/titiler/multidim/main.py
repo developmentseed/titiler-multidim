@@ -4,7 +4,7 @@ import logging
 import os
 
 import zarr
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
@@ -19,7 +19,6 @@ from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 from titiler.multidim import __version__ as titiler_version
 from titiler.multidim.extensions import DatasetMetadataExtension
 from titiler.multidim.factory import XarrayMosaicTilerFactory
-from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
@@ -107,13 +106,6 @@ if api_settings.debug:
 def ping():
     """Health check."""
     return {"ping": "pong!"}
-
-
-@app.get("/clear_cache")
-def clear_cache(cache_client=Depends(get_redis)):
-    """Clear the cache."""
-    cache_client.flushall()
-    return {"status": "cache cleared!"}
 
 
 if __name__ == "__main__":

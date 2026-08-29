@@ -22,7 +22,6 @@ repos:
         additional_dependencies:
         - icechunk
         - types-attrs
-        - types-redis
         - types-requests
         - boto3-stubs
         - types-aiobotocore

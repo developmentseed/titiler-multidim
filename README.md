@@ -13,9 +13,6 @@ Example of application built with `titiler.xarray` [package](https://development
 ```bash
 # It's recommended to install dependencies in a virtual environment
 uv sync --dev
-export TEST_ENVIRONMENT=true  # set this when running locally to mock redis
-#optional: Disable caching
-#export TITILER_MULTIDIM_ENABLE_CACHE=false
 uv run uvicorn titiler.multidim.main:app --reload
 ```
 
@@ -100,7 +97,8 @@ uv run pytest tests/test_app.py::test_get_info
 
 * **Production deployments** are handled in the [NASA-IMPACT/veda-deploy](https://github.com/NASA-IMPACT/veda-deploy) repository.
 * **Test/dev stack deployments** can be triggered by applying the `deploy-dev` label to a pull request in this repository. Each deployment requests a tile from the public native MUR, virtual MUR, and virtual NLDAS Icechunk stores.
-* **CDK synth checks** run automatically on pull requests, including pull requests from forks. The filter fails closed: only pull requests limited to documentation, tests, markdown, and unrelated workflows report the check as skipped (which still satisfies the required status check on `main`); anything else — including application source, which the CDK app imports and the Lambda image bundles — runs the full check. The check is fully anonymous: `cdk synth` runs with dummy configuration (no `VPC_ID`, so the stack is environment-agnostic, and a dummy reader role ARN that is parsed but never resolved) and no AWS credentials, validating the synthesized template and Lambda asset sizes without access to any AWS account.
+* The Lambda runs outside a VPC, using standard outbound networking to reach S3 buckets in any AWS region. It continues to use the imported reader IAM role; the role's IAM policy and each bucket policy still govern S3 access.
+* **CDK synth checks** run automatically on pull requests, including pull requests from forks. The filter fails closed: only pull requests limited to documentation, tests, markdown, and unrelated workflows report the check as skipped (which still satisfies the required status check on `main`); anything else — including application source, which the CDK app imports and the Lambda image bundles — runs the full check. The check is fully anonymous: `cdk synth` runs with a dummy reader role ARN that is parsed but never resolved and no AWS credentials, validating the synthesized template and Lambda asset sizes without access to any AWS account.
 
 To run the same deployment smoke test manually:
 
@@ -110,52 +108,43 @@ uv run python scripts/test_deployment.py --api-url https://your-api.execute-api.
 
 The RASI historical Icechunk store is intentionally excluded because its source data are corrupted.
 
-## New Deployments
+## Local CDK deployment runbook
 
-The following steps detail how to to setup and deploy the CDK stack from your local machine.
+Deployments require Python 3.12+, [`uv`](https://docs.astral.sh/uv/), Node.js/npm, Docker, and the AWS CLI configured with credentials that can bootstrap and deploy the stack. The Lambda image is built by Docker during CDK synthesis.
 
-1. Install CDK and connect to your AWS account. This step is only necessary once per AWS account.
+From a fresh checkout:
 
-    ```bash
-    # Download titiler repo
-    git clone https://github.com/developmentseed/titiler-multidim.git
+```bash
+git clone https://github.com/developmentseed/titiler-multidim.git
+cd titiler-multidim
 
-    # Install with the deployment dependencies
-    uv sync --group deployment
+# Select the AWS account, region, deployment stage, and existing reader role.
+# Run `aws configure --profile myprofile` first if this profile is not configured.
+export AWS_PROFILE=myprofile
+export AWS_DEFAULT_REGION=us-west-2
+export STAGE=testing
+export TITILER_MULTIDIM_READER_ROLE_ARN=arn:aws:iam::123456789012:role/reader
 
-    # Install the pinned local CDK CLI
-    uv run npm --prefix infrastructure/aws ci
+aws sts get-caller-identity
+uv sync --group deployment
+uv run npm --prefix infrastructure/aws ci
+```
 
-    # Deploys the CDK toolkit stack into an AWS environment
-    uv run npm --prefix infrastructure/aws run cdk -- bootstrap
+Bootstrap the CDK toolkit once for each account and region:
 
-    # or to a specific region and or using AWS profile
-    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=myprofile uv run npm --prefix infrastructure/aws run cdk -- bootstrap
-    ```
+```bash
+uv run npm --prefix infrastructure/aws run cdk -- bootstrap
+```
 
-2. Update settings
+Deploy the stack:
 
-    Set environment variable or hard code in `infrastructure/aws/.env` file (e.g `STACK_STAGE=testing`).
+```bash
+uv run npm --prefix infrastructure/aws run cdk -- deploy --all \\
+  --require-approval never \\
+  --outputs-file "$HOME/cdk-outputs.json"
+```
 
-3. Pre-Generate CFN template
+The Lambda runs outside a VPC and uses standard outbound networking, so S3 buckets in any AWS region are reachable without VPC configuration. The CDK stack imports the reader IAM role rather than changing it. The role's IAM policy and each bucket policy must permit the required S3 access.
 
-    ```bash
-    uv run npm --prefix infrastructure/aws run cdk -- synth  # Synthesizes and prints the CloudFormation template for this stack
-    ```
-
-4. Deploy
-
-    ```bash
-    STACK_STAGE=staging uv run npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-staging
-
-    # Deploy in specific region
-    AWS_DEFAULT_REGION=us-west-2 AWS_REGION=us-west-2 AWS_PROFILE=smce-veda STACK_STAGE=production  uv run npm --prefix infrastructure/aws run cdk -- deploy titiler-xarray-production
-    ```
-
-**Important**
-
-The Python `aws-cdk-lib` dependency in `pyproject.toml` is the construct library used by `infrastructure/aws/cdk/app.py`. The npm `aws-cdk` dependency in `infrastructure/aws/package.json` provides the `cdk` CLI. Keep the Python library pinned in `pyproject.toml`, keep the CLI pinned in `package.json` and `package-lock.json`, and always invoke CDK through `npm --prefix infrastructure/aws run cdk -- ...` so synth and deploy use the same local CLI version.
-
-In AWS Lambda environment we need to have specific version of botocore, S3FS, FSPEC and other libraries.
-To make sure the application will both work locally and in AWS Lambda environment you can install the dependencies using `python -m pip install -r infrastructure/aws/requirement-lambda.txt`
+The Python `aws-cdk-lib` dependency in `pyproject.toml` is the construct library used by `infrastructure/aws/cdk/app.py`. The npm `aws-cdk` dependency in `infrastructure/aws/package.json` provides the pinned `cdk` CLI. Always invoke CDK through `npm --prefix infrastructure/aws run cdk -- ...` so synth and deploy use the same local CLI version.
 

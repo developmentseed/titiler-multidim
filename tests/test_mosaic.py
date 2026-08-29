@@ -12,11 +12,10 @@ from titiler.multidim.mosaic import XarrayMosaicBackend
 
 
 @pytest.fixture
-def reader_cls(monkeypatch):
-    """Return the current reader class with its Redis cache disabled."""
+def reader_cls():
+    """Return the current reader class."""
     from titiler.multidim import reader
 
-    monkeypatch.setattr(reader.api_settings, "enable_cache", False)
     return reader.XarrayReader
 
 
