@@ -40,17 +40,30 @@ Manager secret → EDL login → identity probe → `s3credentials` exchange →
 virtual chunk reads from `asdc-prod-protected`. Test it in this order —
 each step needs strictly more of the chain working than the one before.
 
+HCHO and NO2 are separate icechunk repositories with independent time
+axes and different variable sets; `scripts/test_deployment.py` requests
+one tile from each. The walkthrough below is parameterized — set one of
+these blocks and run the steps, then set the other and run them again:
+
 ```bash
+# HCHO (total column)
 TEMPO="s3://airquality-data-store-develop/tempo/hcho/v04-trial"
 VAR=vertical_column
+CMAP=viridis
 ```
 
-HCHO and NO2 are separate repositories with independent time axes and
-different variable sets — `vertical_column` is the HCHO total column;
-`scripts/test_deployment.py` requests a tile from both stores
-(`tempo/no2/v04-trial` with `vertical_column_troposphere`, and this HCHO
-store). The walkthrough below goes deeper on HCHO — metadata, fresh scan
-times, warm-path, and point reads — through the same credential chain.
+```bash
+# NO2 (tropospheric column)
+TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
+VAR=vertical_column_troposphere
+CMAP=magma_r
+```
+
+The colormaps and the `rescale=0,3e16` used below reproduce the GIBS
+rendering that Worldview uses for these products (both GIBS palettes run
+0→3.0e16 molecules/cm²; the HCHO ramp is viridis, the NO2 ramp is
+reversed magma), so tiles here and the Worldview check further down are
+visually comparable. Values above 3e16 clamp to the top color in both.
 
 1. **Metadata** — needs store-bucket IAM only, no EDL:
 
@@ -59,7 +72,7 @@ times, warm-path, and point reads — through the same credential chain.
    curl -sf "$API_URL/info?url=$TEMPO&variable=$VAR" | head -c 400
    ```
 
-   Expect `vertical_column` in the variable list. A failure here is an IAM
+   Expect `$VAR` in the variable list. A failure here is an IAM
    or store problem (reader role permissions on
    `airquality-data-store-develop`, or the store prefix has graduated past
    `v04-trial`), not an EDL problem.
@@ -81,15 +94,13 @@ times, warm-path, and point reads — through the same credential chain.
 3. **A tile** — needs the whole chain:
 
    ```bash
-   TILE="url=$TEMPO&variable=$VAR&sel=time=nearest::$T&rescale=0,1.5e16&colormap_name=viridis"
+   TILE="url=$TEMPO&variable=$VAR&sel=time=nearest::$T&rescale=0,3e16&colormap_name=$CMAP"
    time curl -so /tmp/tempo.png -w '%{http_code} %{content_type}\n' \
      "$API_URL/tiles/WebMercatorQuad/4/3/6.png?$TILE"
    ```
 
    Expect `200 image/png`. The first request on a cold Lambda is the slow
-   one (secret fetch, EDL login, identity probe). `rescale` is carried over
-   from NO2 tropospheric columns; if the tile comes out flat, widen it —
-   HCHO total columns are a different quantity.
+   one (secret fetch, EDL login, identity probe).
 
 4. **The warm path, and a second tile** — re-run step 3 (much faster, the
    credential cache is warm), then a neighbouring tile, which proves chunk
@@ -119,6 +130,75 @@ times, warm-path, and point reads — through the same credential chain.
 
    TEMPO covers North America; pan there. Tiles outside the scan's swath
    are transparent — that's data coverage, not an error.
+
+### Sanity-check against Worldview
+
+NASA Worldview renders the same products from GIBS and is the stable
+reference for "should this tile have data here?". Layer IDs (verified
+against Worldview's config):
+
+- HCHO: `TEMPO_L3_Formaldehyde_Vertical_Column`
+- NO2: `TEMPO_L3_NO2_Vertical_Column_Troposphere`
+
+Build a permalink for the scan you tested (swap the layer ID for NO2):
+
+```bash
+WV_TIME=$(python3 -c "import sys; print(sys.argv[1][:19] + 'Z')" "$T")
+open "https://worldview.earthdata.nasa.gov/?v=-135,15,-55,55&l=TEMPO_L3_Formaldehyde_Vertical_Column,Coastlines_15m,BlueMarble_NextGeneration&t=$WV_TIME"
+```
+
+Compare swath position and spatial patterns, not exact pixels:
+
+- Worldview may serve the near-real-time stream while `v04-trial` is
+  standard processing, so scan times and values can differ slightly.
+- GIBS imagery is quality-filtered (clouds, `main_data_quality_flag`);
+  these tiles render the raw column, so expect data here in noisy areas
+  where Worldview shows gaps.
+- If Worldview shows data where a tile is empty **for the same scan
+  hour**, that's a real finding.
+
+The instrument team's quicklooks at <https://tempo.si.edu/> are a second
+reference for recent scans.
+
+### TileJSON for frontends
+
+Everything a map client needs comes from the `tilejson.json` endpoint,
+with the same query parameters as a tile request:
+
+```bash
+curl -sf "$API_URL/WebMercatorQuad/tilejson.json?$TILE"
+```
+
+which returns (bounds/zooms come from the store):
+
+```json
+{
+  "tilejson": "3.0.0",
+  "version": "1.0.0",
+  "scheme": "xyz",
+  "tiles": [
+    "https://<api-id>.execute-api.us-west-2.amazonaws.com/tiles/WebMercatorQuad/{z}/{x}/{y}?url=s3%3A%2F%2Fairquality-data-store-develop%2Ftempo%2Fhcho%2Fv04-trial&variable=vertical_column&sel=time%3Dnearest%3A%3A2026-08-31T16%3A38%3A59&rescale=0%2C3e16&colormap_name=viridis&tilesize=512"
+  ],
+  "minzoom": 0,
+  "maxzoom": 5,
+  "bounds": [...],
+  "center": [...],
+  "band_descriptions": [["b1", "..."]],
+  "data_type": "float32"
+}
+```
+
+Hand the `tilejson.json` URL itself to frontend devs — Mapbox GL /
+MapLibre (`addSource` with `"url"`), Leaflet, and OpenLayers all consume
+it directly, and the `tiles` template inside carries every query
+parameter. Two things to flag to them:
+
+- The `sel` time is baked into the URL. A dashboard that should follow
+  the growing time axis must re-resolve the newest scan (step 2) and
+  rebuild the URL, or drop `sel` to always serve the store's default
+  slice.
+- The tile template is only valid while the store prefix exists;
+  `v04-trial` graduating will 5xx every tile.
 
 ### Credential refresh (the one failure only time reveals)
 
