@@ -918,15 +918,15 @@ wheels = [
 
 [[package]]
 name = "earthaccess-auth"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "tinynetrc" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/75/e12d0abede478a86e9fc03c4dac8be6fc4819d43f7177ddd01bcc288c34d/earthaccess_auth-0.3.0.tar.gz", hash = "sha256:0a0abb1e5b3cea1be3d55559c99b439bd568d5e28f9fd3e32ff75c816486bc91", size = 165406, upload-time = "2026-08-26T23:54:10.503Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/59/885ebca39738c2f7f79ed7b61dc9e9778e0b46ee7bb527950ba8813cbb6e/earthaccess_auth-0.3.1.tar.gz", hash = "sha256:5e4ce029063a6ba2820063cfc6f991979e04a508e29503a26086c3ebd2f9860a", size = 165790, upload-time = "2026-08-31T19:38:20.644Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/45/2d7a270febdcb542f2135f4bca07eb19c9f848eb391e1e9813869a30696a/earthaccess_auth-0.3.0-py3-none-any.whl", hash = "sha256:428f6c5609da981b2a78eff49f16e3f9d5e965866e52c0c23835c16491d6e2ce", size = 22345, upload-time = "2026-08-26T23:54:09.237Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/49/45436a1c18b44f0f07dcc1250dc6b450b182d3281e767a76b71fa54906d2/earthaccess_auth-0.3.1-py3-none-any.whl", hash = "sha256:468ecef3704611b2194ddb611aaa18abd4d50993d424981c135efad1251c2e74", size = 22530, upload-time = "2026-08-31T19:38:19.552Z" },
 ]
 
 [[package]]
@@ -3417,7 +3417,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "boto3", specifier = ">=1.39.0" },
     { name = "cftime" },
-    { name = "earthaccess-auth", specifier = ">=0.3.0" },
+    { name = "earthaccess-auth", specifier = ">=0.3.1" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "gribberish", extras = ["zarr"], specifier = ">=1.7.0" },
