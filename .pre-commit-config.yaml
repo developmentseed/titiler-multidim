@@ -5,7 +5,7 @@ repos:
       - id: validate-pyproject
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.15
+    rev: v0.16.4
     hooks:
       - id: ruff
         args: [--fix]
@@ -22,7 +22,6 @@ repos:
         additional_dependencies:
         - icechunk
         - types-attrs
-        - types-redis
         - types-requests
         - boto3-stubs
         - types-aiobotocore

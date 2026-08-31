@@ -70,7 +70,7 @@ def _rebuild_default_auth() -> None:
     exported environment variables alone would never be (re-)read once a
     manager exists. Installing a freshly logged-in Auth swaps the manager
     (and its per-endpoint credential cache) for every consumer, including
-    credential callables inside datasets unpickled from the shared cache —
+    the refreshable credential callables icechunk holds inside a dataset —
     they call default_manager() at module level, not a captured instance.
     """
     from earthaccess_auth.auth import Auth

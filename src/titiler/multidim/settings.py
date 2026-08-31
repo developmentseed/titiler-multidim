@@ -2,7 +2,7 @@
 
 import json
 from getpass import getuser
-from typing import Annotated, Any
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,8 +20,6 @@ class ApiSettings(BaseSettings):
     root_path: str = ""
     debug: bool = False
     telemetry_enabled: bool = False
-    cache_host: str = "127.0.0.1"
-    enable_cache: bool = True
     authorized_chunk_access: dict[str, AnyChunkAccess] = {}
     earthdata_secret_arn: str | None = None
 
@@ -56,27 +54,11 @@ class StackSettings(BaseSettings):
     titiler_multidim_stack_name: str = "titiler-multidim"
     stage: str = Field(..., description="Deployment stage, e.g. dev, staging, prod")
     owner: str = Field(default_factory=getuser)
-    vpc_id: Annotated[str | None, "VPC id; creates a new one if not provided"] = None
-    cdk_default_account: str | None = Field(
-        None, description="AWS account id required when deploying to an existing VPC"
-    )
-    cdk_default_region: str | None = Field(
-        None, description="AWS region required when deploying to an existing VPC"
-    )
     veda_custom_host: str | None = Field(
         None, description="Custom host URL override for API Gateway integration"
     )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    def cdk_env(self) -> dict:
-        """Return CDK environment dict for stack."""
-        if self.vpc_id:
-            return {
-                "account": self.cdk_default_account,
-                "region": self.cdk_default_region,
-            }
-        return {}
 
 
 class AppSettings(BaseSettings):

@@ -1,4 +1,4 @@
-"""Auto-parametrized fixture that runs both cache configurations."""
+"""Shared test fixtures."""
 
 import json
 import sys
@@ -6,24 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-# This fixture will automatically parametrize ALL tests that use it
-@pytest.fixture(
-    params=[
-        pytest.param({"cache": True}, id="with_cache"),
-        pytest.param({"cache": False}, id="without_cache"),
-    ]
-)
-def app(request, monkeypatch):
-    """Auto-parametrized app fixture that runs tests with both cache configurations."""
-    config = request.param
-    enable_cache = config.get("cache", False)
-
+@pytest.fixture
+def app(monkeypatch):
+    """Return a test client for the application."""
     # Set environment variables using monkeypatch (auto-cleanup)
     monkeypatch.setenv("TITILER_MULTIDIM_DEBUG", "TRUE")
-    monkeypatch.setenv("TEST_ENVIRONMENT", "1")
-    monkeypatch.setenv(
-        "TITILER_MULTIDIM_ENABLE_CACHE", "TRUE" if enable_cache else "FALSE"
-    )
     # virtual container auth for icechunk tests
     monkeypatch.setenv(
         "TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS",

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
+import logging
 import os
-import pickle
+import time
 from typing import (
     Any,
     Dict,
@@ -20,7 +19,6 @@ import obstore
 import xarray as xr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from pydantic import BaseModel
 from titiler.xarray.io import Reader, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
@@ -29,11 +27,15 @@ from titiler.multidim.chunk_access import (
     earthdata_endpoints,
     parse_chunk_access,
 )
-from titiler.multidim.redis_pool import get_redis
 from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
-cache_client = get_redis()
+logger = logging.getLogger(__name__)
+
+
+def _log_path(src_path: str) -> str:
+    """Return a source path without a potentially sensitive query string."""
+    return src_path.split("?", maxsplit=1)[0]
 
 
 def opener_icechunk(
@@ -69,10 +71,25 @@ def opener_icechunk(
             f"icechunk storage for protocol {protocol} is not implemented"
         )
 
+    log_path = _log_path(src_path)
+    logger.info("Opening Icechunk repository: source=%s", log_path)
+    started_at = time.monotonic()
     repo = icechunk.Repository.open(
         storage=storage, authorize_virtual_chunk_access=credentials
     )
+    logger.info(
+        "Opened Icechunk repository: source=%s elapsed_seconds=%.2f",
+        log_path,
+        time.monotonic() - started_at,
+    )
     containers = repo.config.virtual_chunk_containers or {}
+    for prefix, container in containers.items():
+        logger.info(
+            "Icechunk virtual chunk container: source=%s prefix=%s store=%s",
+            log_path,
+            prefix,
+            container.store,
+        )
     endpoints = earthdata_endpoints(
         entries,
         (container.url_prefix for container in containers.values()),
@@ -86,7 +103,9 @@ def opener_icechunk(
         prime_earthdata_endpoints(endpoints)
     session = repo.readonly_session("main")
     store = session.store
-    ds = xr.open_dataset(
+    logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
+    started_at = time.monotonic()
+    dataset = xr.open_dataset(
         store,
         group=group,
         decode_times=decode_times,
@@ -94,12 +113,12 @@ def opener_icechunk(
         consolidated=False,
         zarr_format=3,
     )
-    if endpoints:
-        # encoding survives pickling but is never served in API responses,
-        # so the cache-hit path can re-prime exactly these endpoints in a
-        # process that didn't open the dataset itself
-        ds.encoding["earthdata_endpoints"] = endpoints
-    return ds
+    logger.info(
+        "Opened Icechunk dataset: source=%s elapsed_seconds=%.2f",
+        log_path,
+        time.monotonic() - started_at,
+    )
+    return dataset
 
 
 # TODO Is there a better way to check if a url points to a file or a prefix?
@@ -107,6 +126,7 @@ def _is_dir(store, path: str = "") -> bool:
     """Return True if path is a prefix containing any objects (directory-like)."""
     # sanitize path and slashes
     path = path.rstrip("/") + "/"
+    logger.info("Checking dataset storage prefix: prefix=%s", path)
     stream = store.list(prefix=path, chunk_size=1)
     try:
         batch = next(stream)
@@ -167,7 +187,16 @@ def guess_opener(
     """
 
     # Identify the storage backend
+    log_path = _log_path(src_path)
+    logger.info("Identifying dataset storage: source=%s", log_path)
+    started_at = time.monotonic()
     storage_format = identify_storage_backend(src_path)
+    logger.info(
+        "Identified dataset storage: source=%s format=%s elapsed_seconds=%.2f",
+        log_path,
+        storage_format,
+        time.monotonic() - started_at,
+    )
 
     if storage_format == "icechunk":
         return opener_icechunk(
@@ -195,88 +224,23 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
-def _entry_options(entry: Any) -> Dict[str, Any]:
-    """Normalize a chunk-access entry (raw dict or parsed model) to a dict."""
-    if isinstance(entry, BaseModel):
-        return entry.model_dump(exclude_unset=True)
-    return dict(entry)
-
-
-def _access_fingerprint(access: Optional[ChunkAccessMapping]) -> str:
-    """Stable digest of the authorization config for the dataset cache key.
-
-    Datasets are cached with their credentials/authorization baked in
-    (icechunk credential callables, s3fs options), so a config change must
-    miss the cache instead of serving data authorized under the old config.
-    """
-    canonical = json.dumps(
-        {prefix: _entry_options(entry) for prefix, entry in (access or {}).items()},
-        sort_keys=True,
-        default=str,
-    )
-    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
-
-
-# the service-wide config can't change without a restart, so its digest —
-# the one every request using the default authorization needs — is computed
-# once instead of re-hashed per request
-_DEFAULT_ACCESS = dict(api_settings.authorized_chunk_access)
-_DEFAULT_ACCESS_FINGERPRINT = _access_fingerprint(_DEFAULT_ACCESS)
-
-
 @attr.s
 class XarrayReader(Reader):
-    """Custom XarrayReader with redis cache"""
+    """Custom XarrayReader with Icechunk and virtual chunk support."""
 
     def __attrs_post_init__(self):
-        """Configure the cached opener before the parent reads the dataset."""
+        """Configure the custom opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
-        self.opener = self._open_cached
+        self.opener = guess_opener
+        log_path = _log_path(self.src_path)
+        logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
+        started_at = time.monotonic()
         super().__attrs_post_init__()
-
-    def _open_cached(self, src_path: str, **kwargs: Any) -> xr.Dataset:
-        """Open a dataset, reusing its Redis cache entry when enabled."""
-        access = kwargs.get("authorize_virtual_chunk_access")
-        fingerprint = (
-            _DEFAULT_ACCESS_FINGERPRINT
-            if access == _DEFAULT_ACCESS
-            else _access_fingerprint(access)
+        logger.info(
+            "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
+            log_path,
+            time.monotonic() - started_at,
         )
-        cache_key = (
-            f"{src_path}_group:{kwargs.get('group')}"
-            f"_time:{kwargs.get('decode_times')}"
-            f"_access:{fingerprint}"
-        )
-
-        if api_settings.enable_cache:
-            data_bytes = cache_client.get(cache_key)
-            if data_bytes:
-                endpoints, ds = pickle.loads(data_bytes)
-                if endpoints:
-                    # the unpickled dataset carries a refreshable credential
-                    # callable that resolves through default_manager() in
-                    # *this* process; the entry records which endpoints it
-                    # needs, so re-prime exactly those (typed EULA/login
-                    # errors surface here instead of opaquely in Rust)
-                    from titiler.multidim.earthdata import (
-                        prime_earthdata_endpoints,
-                    )
-
-                    prime_earthdata_endpoints(endpoints)
-                return ds
-
-        ds = guess_opener(src_path, **kwargs)
-        # pop unconditionally: the encoding slot is only the in-process
-        # opener->here handoff, and must never ride datasets served on
-        endpoints = ds.encoding.pop("earthdata_endpoints", None)
-
-        if api_settings.enable_cache:
-            # the cache entry is an explicit (endpoints, dataset) pair: the
-            # cross-process re-prime contract lives in the cache layer, not
-            # inside xarray metadata
-            cache_client.set(cache_key, pickle.dumps((endpoints, ds)), ex=300)
-
-        return ds
 
     @classmethod
     def list_variables(

@@ -39,12 +39,13 @@ dependencies = [
     "obstore>=0.9.4",
     "pydantic-settings~=2.14",
     "pydantic>=2.13.3,<3.0",
-    "redis",
     "requests",
     "rioxarray",
     "s3fs",
     "xarray>=2025.10.1",
     "zarr>=3.2.0",
+    "titiler-mosaic==2.2.1",
+    "gribberish[zarr]>=1.7.0",
 ]
 
 [project.optional-dependencies]
@@ -53,10 +54,9 @@ server = [
 ]
 lambda = [
     "mangum==0.21.0",
-    "aiobotocore>=2.24.0,<2.24.2",
+    "aiobotocore>=2.24.0,<3.9.1",
     "opentelemetry-exporter-otlp-proto-http>=1.40.0",
     "opentelemetry-instrumentation-fastapi>=0.61b0",
-    "opentelemetry-instrumentation-httpx>=0.61b0",
     "opentelemetry-instrumentation-logging>=0.61b0",
     "opentelemetry-propagator-aws-xray>=1.0.2",
     "opentelemetry-sdk>=1.40.0",
@@ -66,7 +66,6 @@ lambda = [
 [dependency-groups]
 dev = [
     "dask>=2026.3.0",
-    "fakeredis>=2.35.1",
     "httpx2",
     "ipykernel>=7.2.0",
     "ipython>=9.13.0",
@@ -81,7 +80,7 @@ dev = [
     "virtualizarr",
 ]
 deployment = [
-    "aws-cdk-lib==2.257.0",
+    "aws-cdk-lib==2.266.0",
     "constructs>=10.5.0,<11.0.0",
     "pydantic-settings~=2.14",
     "python-dotenv>=1.2.2",

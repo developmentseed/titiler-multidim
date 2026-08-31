@@ -1,6 +1,7 @@
 """titiler.multidim."""
 
 import logging
+import os
 
 import icechunk
 import zarr
@@ -9,7 +10,7 @@ from earthaccess_auth.exceptions import (
     LoginStrategyUnavailable,
     S3CredentialsRequestFailure,
 )
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from starlette import status
 from starlette.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
@@ -20,17 +21,23 @@ from titiler.core.middleware import (
     LoggerMiddleware,
     TotalTimeMiddleware,
 )
+from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 
 from titiler.multidim import __version__ as titiler_version
-from titiler.multidim.factory import XarrayTilerFactory
-from titiler.multidim.redis_pool import get_redis
+from titiler.multidim.extensions import DatasetMetadataExtension
+from titiler.multidim.factory import XarrayMosaicTilerFactory
 from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True
-logging.getLogger("rio-tiler").setLevel(logging.ERROR)
+logging.getLogger("rio_tiler").setLevel(logging.INFO)
 
 api_settings = ApiSettings()
+
+if "AWS_EXECUTION_ENV" not in os.environ:
+    logging.basicConfig(
+        level=logging.DEBUG if api_settings.debug else logging.INFO,
+    )
 
 app = FastAPI(
     title=api_settings.name,
@@ -42,7 +49,10 @@ app = FastAPI(
 
 ###############################################################################
 # Tiles endpoints
-xarray_factory = XarrayTilerFactory(enable_telemetry=api_settings.telemetry_enabled)
+xarray_factory = XarrayMosaicTilerFactory(
+    enable_telemetry=api_settings.telemetry_enabled,
+    extensions=[DatasetMetadataExtension()],
+)
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
 
 ###############################################################################
@@ -71,6 +81,7 @@ error_codes = {
 }
 add_exception_handlers(app, error_codes)
 add_exception_handlers(app, DEFAULT_STATUS_CODES)
+add_exception_handlers(app, MOSAIC_STATUS_CODES)
 
 logger = logging.getLogger(__name__)
 
@@ -195,8 +206,14 @@ def ping():
     return {"ping": "pong!"}
 
 
-@app.get("/clear_cache")
-def clear_cache(cache_client=Depends(get_redis)):
-    """Clear the cache."""
-    cache_client.flushall()
-    return {"status": "cache cleared!"}
+if __name__ == "__main__":
+    import uvicorn
+
+    log_level = "debug" if api_settings.debug else "info"
+    uvicorn.run(
+        "titiler.multidim.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level=log_level,
+    )

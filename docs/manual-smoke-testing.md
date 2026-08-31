@@ -51,11 +51,6 @@ TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
    `airquality-data-store-develop`, or the store prefix has graduated past
    `v04-trial`), not an EDL problem.
 
-   `/variables` is the one endpoint that never uses the Redis dataset
-   cache, so it fails first when a store moves or permissions change while
-   `/tiles` and `/info` are still being served from a warm entry. If they
-   disagree, `GET $API_URL/clear_cache` and re-check.
-
 2. **A tile** — needs the whole chain:
 
    ```bash
@@ -200,10 +195,8 @@ gated on `kms:ViaService=secretsmanager.<region>.amazonaws.com`.
 ## Freshness (expected behavior, not a bug)
 
 Forward processing appends TEMPO scans continuously, but readers sit
-behind two caches: CloudFront (`max-age=3600`) and the service's Redis
-dataset cache. A missing newest scan within that window is caching.
-`GET $API_URL/clear_cache` drops the Redis layer if you need to see a
-fresh append immediately; CloudFront expires on its own.
+behind CloudFront (`max-age=3600`). A missing newest scan within that
+window is caching; it expires on its own.
 
 ## The public stores
 
