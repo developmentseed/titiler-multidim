@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import operator
 import os
+import re
 import time
 from typing import (
     Any,
@@ -19,7 +21,8 @@ import obstore
 import xarray as xr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from titiler.xarray.io import Reader, xarray_open_dataset
+from titiler.core.errors import BadRequestError
+from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
     ChunkAccessMapping,
@@ -224,9 +227,26 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
+_WHERE_CONDITION = re.compile(
+    r"^\s*(?P<variable>[\w.-]+)\s*(?P<op>==|!=|<=|>=|<|>)\s*"
+    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+)
+
+_WHERE_OPS: Dict[str, Any] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+}
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with Icechunk and virtual chunk support."""
+
+    where: Optional[List[str]] = attr.ib(default=None, kw_only=True)
 
     def __attrs_post_init__(self):
         """Configure the custom opener before the parent reads the dataset."""
@@ -236,11 +256,55 @@ class XarrayReader(Reader):
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
         super().__attrs_post_init__()
+        self._apply_where()
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
             log_path,
             time.monotonic() - started_at,
         )
+
+    def _apply_where(self) -> None:
+        """Mask the selected variable by the `where` conditions.
+
+        Each condition is `{variable}{op}{number}` against another variable
+        of the same dataset, extracted with the same `sel` selectors so the
+        mask and the data describe the same slice. Conditions are ANDed;
+        failing pixels become NaN and follow the normal nodata path.
+        """
+        if not self.where:
+            return
+        mask = None
+        for condition in self.where:
+            parsed = _WHERE_CONDITION.match(condition)
+            if not parsed:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: expected "
+                    "`{variable}{op}{number}` with op one of "
+                    f"{', '.join(_WHERE_OPS)}"
+                )
+            name = parsed["variable"]
+            if name not in self.ds:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: variable "
+                    f"{name!r} not found in the dataset"
+                )
+            try:
+                da = get_variable(self.ds, name, sel=self.sel)
+            except (KeyError, AssertionError) as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} does "
+                    "not accept this request's `sel` selectors"
+                ) from e
+            extra_dims = set(da.dims) - set(self.input.dims)
+            if extra_dims:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} has "
+                    f"dimensions {sorted(map(str, extra_dims))} that "
+                    f"{self.variable!r} does not"
+                )
+            comparison = _WHERE_OPS[parsed["op"]](da, float(parsed["value"]))
+            mask = comparison if mask is None else mask & comparison
+        self.input = self.input.where(mask)
 
     @classmethod
     def list_variables(

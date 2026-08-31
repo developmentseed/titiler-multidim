@@ -152,8 +152,17 @@ Compare swath position and spatial patterns, not exact pixels:
 - Worldview may serve the near-real-time stream while `v04-trial` is
   standard processing, so scan times and values can differ slightly.
 - GIBS imagery is quality-filtered (clouds, `main_data_quality_flag`);
-  these tiles render the raw column, so expect data here in noisy areas
-  where Worldview shows gaps.
+  the unfiltered column shows data in noisy areas where Worldview shows
+  gaps. The stores keep the quality variables, so `where` closes most of
+  the visual difference:
+
+  ```bash
+  curl -so /tmp/tempo-filtered.png -w '%{http_code}\n' \
+    "$API_URL/tiles/WebMercatorQuad/4/3/6.png?$TILE&where=main_data_quality_flag==0&where=eff_cloud_fraction<0.2"
+  ```
+
+  (GIBS's exact filter recipe isn't published; flag==0 plus a cloud cap
+  is a close approximation, tune to taste.)
 - If Worldview shows data where a tile is empty **for the same scan
   hour**, that's a real finding.
 

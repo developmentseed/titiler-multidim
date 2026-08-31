@@ -38,6 +38,23 @@ TiTiler 2 is a breaking API upgrade:
 - Set a selector method on the selector itself, for example `sel=time=nearest::2020-01-06`, instead of using `sel_method`.
 - TileJSON now includes additional raster metadata fields.
 
+## Filtering with `where`
+
+Every data endpoint accepts a repeatable `where` parameter that masks the
+selected variable by numeric conditions on other variables of the same
+dataset — `{variable}{op}{number}` with op one of `==`, `!=`, `<`, `<=`,
+`>`, `>=`. Conditions are ANDed; pixels failing any condition render as
+nodata (transparent tiles, `null` from `/point`). The condition variables
+are sliced with the same `sel` as the main variable, and each distinct
+condition variable adds its chunk reads to the request.
+
+```bash
+curl "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=...&variable=vertical_column&where=main_data_quality_flag==0&where=eff_cloud_fraction<0.2&rescale=0,3e16&colormap_name=viridis"
+```
+
+`tilejson.json` forwards `where` into its tile template, so filtered
+TileJSON URLs work in map clients unchanged.
+
 ## Authorizing icechunk virtual chunk access
 
 Icechunk datasets can reference "virtual chunks" stored outside the repository (for example NetCDF files in another bucket). Access to those locations is denied unless each container URL prefix is explicitly authorized via the `TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS` setting, a JSON object mapping prefixes to access options:
