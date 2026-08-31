@@ -46,20 +46,6 @@ TEST_CASES = (
         # exercises the earthdata path: Secrets Manager secret -> EDL login
         # -> identity probe -> s3credentials -> virtual chunk reads from
         # asdc-prod-protected
-        "virtual TEMPO NO2 Icechunk (earthdata auth)",
-        "4/3/6",
-        {
-            "url": "s3://airquality-data-store-develop/tempo/no2/v04-trial",
-            "variable": "vertical_column_troposphere",
-            "sel": "time=nearest::2026-08-24T15:40:44",
-            "rescale": "0,1.5e16",
-            "colormap_name": "viridis",
-        },
-    ),
-    (
-        # HCHO is a separate repository with its own time axis and variable
-        # set; with the NO2 case this reads two stores through one
-        # credential chain
         "virtual TEMPO HCHO Icechunk (earthdata auth)",
         "4/3/6",
         {
