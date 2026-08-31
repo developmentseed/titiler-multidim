@@ -109,10 +109,12 @@ times, warm-path, and point reads — through the same credential chain.
    A masked/nan result means `-95,35` fell outside that scan's swath; try
    `-90,38`.
 
-6. **Look at it** — open the map viewer in a browser:
+6. **Look at it** — open the map viewer in a browser (the quotes matter:
+   unquoted `&` is a shell operator):
 
-   ```text
-   $API_URL/WebMercatorQuad/map.html?url=s3://airquality-data-store-develop/tempo/hcho/v04-trial&variable=vertical_column&sel=time=nearest::<T>&rescale=0,1.5e16&colormap_name=viridis
+   ```bash
+   echo "$API_URL/WebMercatorQuad/map.html?$TILE"        # print the URL, or
+   open "$API_URL/WebMercatorQuad/map.html?$TILE"        # open it (macOS)
    ```
 
    TEMPO covers North America; pan there. Tiles outside the scan's swath
