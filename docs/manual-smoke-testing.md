@@ -46,10 +46,11 @@ VAR=vertical_column
 ```
 
 HCHO and NO2 are separate repositories with independent time axes and
-different variable sets — `vertical_column` is the HCHO total column, while
-`scripts/test_deployment.py` covers the NO2 store (`tempo/no2/v04-trial`,
-`vertical_column_troposphere`). Running both by hand exercises two stores
-through one credential chain.
+different variable sets — `vertical_column` is the HCHO total column;
+`scripts/test_deployment.py` requests a tile from both stores
+(`tempo/no2/v04-trial` with `vertical_column_troposphere`, and this HCHO
+store). The walkthrough below goes deeper on HCHO — metadata, fresh scan
+times, warm-path, and point reads — through the same credential chain.
 
 1. **Metadata** — needs store-bucket IAM only, no EDL:
 
