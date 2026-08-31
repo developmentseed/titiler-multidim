@@ -89,7 +89,11 @@ def main() -> int:
                     or response.read(8) != b"\x89PNG\r\n\x1a\n"
                 ):
                     failures.append(f"{name}: unexpected response from {url}")
-        except (HTTPError, URLError, TimeoutError) as error:
+        except HTTPError as error:
+            # the body carries the reason; str(HTTPError) is only the status
+            detail = error.read(2048).decode("utf-8", "replace")
+            failures.append(f"{name}: {error}: {detail}")
+        except (URLError, TimeoutError) as error:
             failures.append(f"{name}: {error}")
 
     for failure in failures:

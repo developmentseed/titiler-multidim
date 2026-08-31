@@ -4,6 +4,10 @@ What to check by hand after a `deploy-dev` labeled deployment goes live,
 beyond the automated tile requests in `scripts/test_deployment.py`. All
 examples use `API_URL` for the deployed endpoint.
 
+While the `deploy-dev` label is on the PR, **every later push redeploys**.
+Re-resolve `API_URL` and re-run from the top after any push you make
+mid-session.
+
 ## Find the endpoint
 
 The deploy job prints it: open the workflow run for "CDK Deploy Dev
@@ -37,45 +41,94 @@ virtual chunk reads from `asdc-prod-protected`. Test it in this order —
 each step needs strictly more of the chain working than the one before.
 
 ```bash
-TEMPO="s3://airquality-data-store-develop/tempo/no2/v04-trial"
+TEMPO="s3://airquality-data-store-develop/tempo/hcho/v04-trial"
+VAR=vertical_column
 ```
+
+HCHO and NO2 are separate repositories with independent time axes and
+different variable sets — `vertical_column` is the HCHO total column, while
+`scripts/test_deployment.py` covers the NO2 store (`tempo/no2/v04-trial`,
+`vertical_column_troposphere`). Running both by hand exercises two stores
+through one credential chain.
 
 1. **Metadata** — needs store-bucket IAM only, no EDL:
 
    ```bash
    curl -sf "$API_URL/variables?url=$TEMPO"
-   curl -sf "$API_URL/info?url=$TEMPO&variable=vertical_column_troposphere" | head -c 400
+   curl -sf "$API_URL/info?url=$TEMPO&variable=$VAR" | head -c 400
    ```
 
-   A failure here is an IAM or store problem (reader role permissions on
+   Expect `vertical_column` in the variable list. A failure here is an IAM
+   or store problem (reader role permissions on
    `airquality-data-store-develop`, or the store prefix has graduated past
    `v04-trial`), not an EDL problem.
 
-2. **A tile** — needs the whole chain:
+2. **Take the scan time from the store** — the time axis grows all day, so
+   read it instead of hardcoding one:
 
    ```bash
-   curl -so /tmp/tempo.png -w '%{http_code} %{content_type}\n' \
-     "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=$TEMPO&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44&rescale=0,1.5e16&colormap_name=viridis"
+   T=$(curl -sf "$API_URL/info?url=$TEMPO&variable=$VAR&show_times=true" \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin)["times"][-1])')
+   echo "$T"
+   ```
+
+   `show_times` is single-url only. Every step below selects with
+   `sel=time=nearest::$T`, so an approximate timestamp still resolves —
+   but starting from the newest scan means an empty tile is a swath
+   question rather than a stale-timestamp one.
+
+3. **A tile** — needs the whole chain:
+
+   ```bash
+   TILE="url=$TEMPO&variable=$VAR&sel=time=nearest::$T&rescale=0,1.5e16&colormap_name=viridis"
+   time curl -so /tmp/tempo.png -w '%{http_code} %{content_type}\n' \
+     "$API_URL/tiles/WebMercatorQuad/4/3/6.png?$TILE"
    ```
 
    Expect `200 image/png`. The first request on a cold Lambda is the slow
-   one (secret fetch, EDL login, identity probe); repeat it and it should
-   come back much faster from the warmed credential cache.
+   one (secret fetch, EDL login, identity probe). `rescale` is carried over
+   from NO2 tropospheric columns; if the tile comes out flat, widen it —
+   HCHO total columns are a different quantity.
 
-3. **A point value** — same chain, different read path:
+4. **The warm path, and a second tile** — re-run step 3 (much faster, the
+   credential cache is warm), then a neighbouring tile, which proves chunk
+   reads past the first manifest entry rather than one lucky chunk:
 
    ```bash
-   curl -sf "$API_URL/point/-95,35?url=$TEMPO&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44"
+   curl -so /tmp/tempo2.png -w '%{http_code}\n' \
+     "$API_URL/tiles/WebMercatorQuad/4/4/6.png?$TILE"
    ```
 
-4. **Look at it** — open the map viewer in a browser:
+5. **A point value** — same chain, different read path:
+
+   ```bash
+   curl -sf "$API_URL/point/-95,35?url=$TEMPO&variable=$VAR&sel=time=nearest::$T"
+   ```
+
+   A masked/nan result means `-95,35` fell outside that scan's swath; try
+   `-90,38`.
+
+6. **Look at it** — open the map viewer in a browser:
 
    ```text
-   $API_URL/WebMercatorQuad/map.html?url=s3://airquality-data-store-develop/tempo/no2/v04-trial&variable=vertical_column_troposphere&sel=time=nearest::2026-08-24T15:40:44&rescale=0,1.5e16&colormap_name=viridis
+   $API_URL/WebMercatorQuad/map.html?url=s3://airquality-data-store-develop/tempo/hcho/v04-trial&variable=vertical_column&sel=time=nearest::<T>&rescale=0,1.5e16&colormap_name=viridis
    ```
 
    TEMPO covers North America; pan there. Tiles outside the scan's swath
    are transparent — that's data coverage, not an error.
+
+### Credential refresh (the one failure only time reveals)
+
+The DAAC `s3credentials` exchange returns hourly credentials, and icechunk
+re-invokes the refresh callable at chunk-read time as they near expiry. A
+fresh deploy never exercises that: every step above runs inside the first
+credentials' lifetime.
+
+Leave the deployment idle for 55+ minutes, then re-run step 3. A `500`
+that appears **only** here is the refresh callable failing, not the initial
+login — the rest of the chain already proved itself. Cold-starting in
+between hides it, since a new sandbox logs in from scratch; the test only
+means something against a Lambda that stayed warm.
 
 ### Reading the failure modes
 
@@ -89,7 +142,7 @@ you whose problem it is.
 | `500` "Authentication with Earthdata Login failed" | EDL itself rejected the login (bad username/password secret, EDL outage) | Check the secret's contents and EDL status |
 | `500` "icechunk storage error" | The store itself couldn't be read | Check reader-role S3 permissions and the store prefix |
 | Metadata works but every tile fails | Chunk-read-time credential refresh is failing while store metadata (read with ambient IAM) still works | Same 403/500 triage as above — the wrapped error keeps the status distinction |
-| `500` "File format identification for extension  is not implemented" (note the empty extension) | Nothing was found at the url: `identify_storage_backend` listed the prefix, got zero objects, and fell back to treating it as a single file | Fix the url, or check the store prefix still exists — this is never a format problem |
+| `501` "File format identification for extension  is not implemented" (note the empty extension) | Nothing was found at the url: `identify_storage_backend` listed the prefix, got zero objects, and fell back to treating it as a single file | Fix the url, or check the store prefix still exists — this is never a format problem |
 | `500` "no non-interactive EDL login strategy available" | The Lambda has no `TITILER_MULTIDIM_EARTHDATA_SECRET_ARN`, so credential loading is a permanent no-op — or the first secret fetch failed and this request landed in the 60s retry window | Check the deployed env var (below); if it is set, look for `could not read the earthdata secret` in the logs and treat it as a `GetSecretValue` failure |
 
 Details in the response bodies are intentionally generic; the specifics
