@@ -917,6 +917,19 @@ wheels = [
 ]
 
 [[package]]
+name = "earthaccess-auth"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "tinynetrc" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/38/59/885ebca39738c2f7f79ed7b61dc9e9778e0b46ee7bb527950ba8813cbb6e/earthaccess_auth-0.3.1.tar.gz", hash = "sha256:5e4ce029063a6ba2820063cfc6f991979e04a508e29503a26086c3ebd2f9860a", size = 165790, upload-time = "2026-08-31T19:38:20.644Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3c/49/45436a1c18b44f0f07dcc1250dc6b450b182d3281e767a76b71fa54906d2/earthaccess_auth-0.3.1-py3-none-any.whl", hash = "sha256:468ecef3704611b2194ddb611aaa18abd4d50993d424981c135efad1251c2e74", size = 22530, upload-time = "2026-08-31T19:38:19.552Z" },
+]
+
+[[package]]
 name = "execnet"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3284,6 +3297,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tinynetrc"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/8f/6df2414a8f38b08836726986437f7612983f25c6dc3c55c66f4850a3d795/tinynetrc-1.3.1.tar.gz", hash = "sha256:2b9a256d2e630643b8f0985f5e826ccf0bf3716e07e596a4f67feab363d254df", size = 5484, upload-time = "2021-08-15T18:24:13.1Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/0b/633691d7cea5129afa622869485d1985b038df1d3597a35848731d106762/tinynetrc-1.3.1-py2.py3-none-any.whl", hash = "sha256:46c7820e5f49c9434d2c4cd74de8a06edbbd45e63a8a2980a90b8a43db8facf7", size = 3949, upload-time = "2021-08-15T18:24:11.744Z" },
+]
+
+[[package]]
 name = "titiler-core"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3324,6 +3346,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "cftime" },
+    { name = "earthaccess-auth" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "gribberish", extra = ["zarr"] },
@@ -3394,6 +3417,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "boto3", specifier = ">=1.39.0" },
     { name = "cftime" },
+    { name = "earthaccess-auth", specifier = ">=0.3.1" },
     { name = "fastapi" },
     { name = "fsspec" },
     { name = "gribberish", extras = ["zarr"], specifier = ">=1.7.0" },

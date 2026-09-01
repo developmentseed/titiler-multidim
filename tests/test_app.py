@@ -256,6 +256,164 @@ def test_sel_nearest_netcdf(app):
     assert response.status_code == 200
 
 
+def test_earthdata_exception_handlers_registered(app):
+    from earthaccess_auth.exceptions import (
+        LoginStrategyUnavailable,
+        S3CredentialsRequestFailure,
+    )
+
+    from titiler.multidim.main import app as fastapi_app
+
+    assert S3CredentialsRequestFailure in fastapi_app.exception_handlers
+    assert LoginStrategyUnavailable in fastapi_app.exception_handlers
+
+
+def test_earthdata_auth_failure_returns_403(app, monkeypatch):
+    """A typed EULA rejection raised by the opener surfaces as HTTP 403.
+
+    The unit tests in test_chunk_access.py verify the typed
+    S3CredentialsRequestFailure escapes in Python (not wrapped by icechunk's
+    Rust layer); this test verifies the app maps it to 403 with the EULA
+    message intact.
+    """
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    def raise_eula(*args, **kwargs):
+        raise S3CredentialsRequestFailure(
+            "EULA not accepted: https://urs.earthdata.nasa.gov/approve"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_eula)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 403
+    assert "EULA" in response.text
+
+
+def test_eula_403_does_not_echo_daac_response_body(app, monkeypatch):
+    """earthaccess-auth embeds up to 1000 chars of the DAAC's raw HTTP
+    response in S3CredentialsRequestFailure; that body (internal
+    hostnames, correlation IDs, maintenance pages) must go to the service
+    log only, never to unauthenticated callers. The client gets a fixed
+    message pointing at the EDL EULA/application pages."""
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    def raise_failure(*args, **kwargs):
+        raise S3CredentialsRequestFailure(
+            "The s3credentials endpoint https://internal.example/s3credentials "
+            "rejected the request with status 500:\n"
+            "DAAC-INTERNAL-BODY correlation-id=abc123\n"
+            "Consider accepting the EULAs available at "
+            "https://urs.earthdata.nasa.gov/users/earthaccess/unaccepted_eulas "
+            "and applications at https://urs.earthdata.nasa.gov/application_search."
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_failure)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 403
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "internal.example" not in response.text
+    assert "EULA" in response.text
+    assert "urs.earthdata.nasa.gov" in response.text
+
+
+def test_login_attempt_failure_returns_sanitized_500(app, monkeypatch):
+    """LoginAttemptFailure carries the raw EDL response body (HTML error or
+    maintenance pages); it must be mapped and sanitized, not fall through
+    to the catch-all 500 that returns str(exc) verbatim."""
+    from earthaccess_auth.exceptions import LoginAttemptFailure
+
+    def raise_failure(*args, **kwargs):
+        raise LoginAttemptFailure(
+            "Authentication with Earthdata Login failed with:\n"
+            "<html>EDL-MAINTENANCE-PAGE</html>"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_failure)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "EDL-MAINTENANCE-PAGE" not in response.text
+    assert "Earthdata Login" in response.text
+
+
+def test_expired_service_credentials_return_500_not_eula_403(app, monkeypatch):
+    """A 401 from the s3credentials endpoint means the SERVICE's EDL
+    credentials are invalid (e.g. the ~60-day token expired) — an operator
+    problem that must alarm as a 5xx, not a 403 telling end users to
+    accept EULAs they can't act on. The raw body still stays out of the
+    response."""
+    from earthaccess_auth.exceptions import S3CredentialsRequestFailure
+
+    def raise_401(*args, **kwargs):
+        raise S3CredentialsRequestFailure(
+            "The s3credentials endpoint https://internal.example/s3credentials "
+            "rejected the request with status 401:\nDAAC-INTERNAL-BODY",
+            status_code=401,
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_401)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "internal.example" not in response.text
+    assert "EULA" not in response.text
+    assert "Earthdata" in response.text
+
+
+def test_icechunk_wrapped_eula_failure_returns_sanitized_403(app, monkeypatch):
+    """icechunk re-invokes the refreshable credential callable in Rust at
+    chunk-read time (the steady state, ~2-3 min before each hourly
+    expiry) and stringifies whatever it raises into an IcechunkError.
+    That wrapped text — raw DAAC body included — must never reach the
+    client, and an identifiable EULA rejection must still map to 403."""
+    import icechunk
+
+    def raise_wrapped(*args, **kwargs):
+        raise icechunk.IcechunkError(
+            "error fetching virtual reference: credential refresh failed: "
+            "S3CredentialsRequestFailure: The s3credentials endpoint "
+            "https://internal.example/s3credentials rejected the request "
+            "with status 403:\nDAAC-INTERNAL-BODY"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_wrapped)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 403
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "internal.example" not in response.text
+    assert "EULA" in response.text
+
+
+def test_icechunk_wrapped_401_returns_sanitized_500(app, monkeypatch):
+    import icechunk
+
+    def raise_wrapped(*args, **kwargs):
+        raise icechunk.IcechunkError(
+            "S3CredentialsRequestFailure: The s3credentials endpoint "
+            "https://internal.example/s3credentials rejected the request "
+            "with status 401:\nDAAC-INTERNAL-BODY"
+        )
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_wrapped)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "DAAC-INTERNAL-BODY" not in response.text
+    assert "EULA" not in response.text
+
+
+def test_icechunk_generic_error_is_sanitized_500(app, monkeypatch):
+    """Any icechunk storage error can chain upstream response text
+    (presigned URLs, internal hostnames); clients get a fixed message."""
+    import icechunk
+
+    def raise_storage(*args, **kwargs):
+        raise icechunk.IcechunkError("storage error: https://internal.example/x")
+
+    monkeypatch.setattr("titiler.multidim.reader.guess_opener", raise_storage)
+    response = app.get("/variables", params={"url": "s3://asdc-prod-protected/store"})
+    assert response.status_code == 500
+    assert "internal.example" not in response.text
+
+
 def test_errors_not_cacheable(app):
     """Error responses must not carry Cache-Control, so CDNs never cache them."""
     err = app.get("/variables")  # missing required ?url= -> 422

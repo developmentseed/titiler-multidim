@@ -43,6 +43,20 @@ TEST_CASES = (
         },
     ),
     (
+        # exercises the earthdata path: Secrets Manager secret -> EDL login
+        # -> identity probe -> s3credentials -> virtual chunk reads from
+        # asdc-prod-protected
+        "virtual TEMPO HCHO Icechunk (earthdata auth)",
+        "4/3/6",
+        {
+            "url": "s3://airquality-data-store-develop/tempo/hcho/v04-trial",
+            "variable": "vertical_column",
+            "sel": "time=nearest::2026-08-24T15:40:44",
+            "rescale": "0,1.5e16",
+            "colormap_name": "viridis",
+        },
+    ),
+    (
         "MUR SST zarr",
         "5/8/13",
         {
@@ -75,7 +89,11 @@ def main() -> int:
                     or response.read(8) != b"\x89PNG\r\n\x1a\n"
                 ):
                     failures.append(f"{name}: unexpected response from {url}")
-        except (HTTPError, URLError, TimeoutError) as error:
+        except HTTPError as error:
+            # the body carries the reason; str(HTTPError) is only the status
+            detail = error.read(2048).decode("utf-8", "replace")
+            failures.append(f"{name}: {error}: {detail}")
+        except (URLError, TimeoutError) as error:
             failures.append(f"{name}: {error}")
 
     for failure in failures:

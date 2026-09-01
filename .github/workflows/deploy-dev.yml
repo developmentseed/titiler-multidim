@@ -28,7 +28,13 @@ jobs:
       TITILER_MULTIDIM_PYTHONWARNINGS: ignore
       TITILER_MULTIDIM_DEBUG: true
       TITILER_MULTIDIM_READER_ROLE_ARN: ${{ vars.TITILER_MULTIDIM_READER_ROLE_ARN }}
-      TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS: '{"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": true}, "s3://podaac-ops-cumulus-protected/MUR-JPL-L4-GLOB-v4.1/": {"from_env": true}, "s3://nasa-waterinsight/RASI/": {"anonymous": true}, "s3://noaa-nws-naqfc-pds/": {"anonymous": true}}'
+      TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS: '{"s3://nasa-waterinsight/NLDAS3/forcing/daily/": {"anonymous": true}, "s3://podaac-ops-cumulus-protected/MUR-JPL-L4-GLOB-v4.1/": {"from_env": true}, "s3://nasa-waterinsight/RASI/": {"anonymous": true}, "s3://noaa-nws-naqfc-pds/": {"anonymous": true}, "s3://asdc-prod-protected/": {"earthdata": true}}'
+      # Secrets Manager ARN holding EDL credentials for the earthdata entries
+      # above (plain token string, or JSON with EARTHDATA_* keys). Resolved
+      # lazily by the Lambda at first earthdata use, so rotating the secret
+      # needs no redeploy; the reader role must allow
+      # secretsmanager:GetSecretValue on it.
+      TITILER_MULTIDIM_EARTHDATA_SECRET_ARN: ${{ vars.EARTHDATA_SECRET_ARN }}
 
     steps:
       - name: Determine branch to deploy

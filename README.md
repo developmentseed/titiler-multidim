@@ -56,11 +56,11 @@ The URL scheme of each prefix selects how its options are interpreted:
 
 | Scheme | Options | Credentials used |
 | --- | --- | --- |
-| `s3://` | `anonymous`, `from_env`, `access_key_id`, `secret_access_key`, `session_token` (set fields are passed to [`icechunk.s3_credentials`](https://icechunk.io/en/latest/icechunk-python/reference/#icechunk.s3_credentials)) | S3 |
+| `s3://` | `anonymous`, `from_env`, `access_key_id`, `secret_access_key`, `session_token`, `earthdata` (set fields are passed to [`icechunk.s3_credentials`](https://icechunk.io/en/latest/icechunk-python/reference/#icechunk.s3_credentials); `earthdata` instead fetches refreshable credentials from NASA Earthdata for the entry's registered bucket, see [NASA Earthdata access](#nasa-earthdata-access)) | S3 |
 | `gs://` or `gcs://` | `anonymous`, `from_env`, `service_account_file`, `service_account_key`, `application_credentials`, `bearer_token` (passed to `icechunk.gcs_credentials`) | Google Cloud Storage |
 | `az://` or `azure://` | `from_env`, `access_key`, `sas_token`, `bearer_token` (passed to `icechunk.azure_credentials`) | Azure Blob Storage |
 
-The options for each entry are validated against a typed model for its scheme: an option outside the table above (including icechunk builder arguments that are not JSON-expressible, such as `get_credentials`) is rejected when the configuration is parsed. Credential use is opt-in for every scheme: each entry must select an access mode explicitly (`anonymous`, `from_env`, or explicit credential fields), so an empty entry `{}` is rejected rather than falling back to the service's own ambient credentials.
+The options for each entry are validated against a typed model for its scheme: an option outside the table above (including icechunk builder arguments that are not JSON-expressible, such as `get_credentials`) is rejected when the configuration is parsed. Credential use is opt-in for every scheme: each entry must select an access mode explicitly (`anonymous`, `from_env`, `earthdata` (s3 only), or explicit credential fields), so an empty entry `{}` is rejected rather than falling back to the service's own ambient credentials.
 
 Icechunk attaches credentials to a container by exact string match against the `url_prefix` the dataset writer declared, trailing slash included. An entry for `s3://bucket/prefix/` does not match a container declared as `s3://bucket/prefix`, so the configured prefixes must reproduce the dataset's container prefixes character for character (`gs://` vs. `gcs://` and `az://` vs. `azure://` likewise follow the dataset's spelling). Schemes must be spelled in lowercase: a prefix like `S3://…` could never match a container, so it is rejected when the configuration is parsed.
 
@@ -69,6 +69,51 @@ Notes:
 - The configuration is validated at application startup: an unsupported scheme or an unrecognized option fails the deploy instead of surfacing as request-time errors.
 - icechunk has no anonymous Azure credential variant, so `anonymous` is only accepted for `s3://` and `gs://`/`gcs://` entries.
 - `file://` prefixes are rejected: virtual chunks must never read the server's local filesystem, which would let any client craft a repository that exfiltrates server files.
+
+## NASA Earthdata access
+
+To serve an icechunk dataset whose virtual chunks live in a protected
+NASA Earthdata bucket, add an entry for that container prefix with
+`"earthdata": true`:
+
+```bash
+TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS='{
+  "s3://asdc-prod-protected/": {"earthdata": true}
+}'
+```
+
+The service exchanges its Earthdata Login identity for the DAAC's
+temporary S3 credentials and refreshes them as they expire. The bucket
+must appear in [earthaccess-auth]'s CMR-derived registry (checked at
+startup), and each entry is an explicit per-prefix grant — see the
+authorization warning above for what granting one publishes. Earthdata
+credentials apply to virtual chunk containers only: the icechunk store
+itself and zarr/NetCDF sources are read with the service's own ambient
+credentials.
+
+Requirements:
+
+- An EDL identity: `EARTHDATA_TOKEN` or
+  `EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` in the environment, a
+  `.netrc` entry for `urs.earthdata.nasa.gov`, or — recommended for
+  deployments — `TITILER_MULTIDIM_EARTHDATA_SECRET_ARN` pointing at a
+  Secrets Manager secret holding either shape (a plain token string, or
+  JSON with `EARTHDATA_*` keys). The secret is resolved lazily at first
+  earthdata use (SnapStart-safe) and re-read periodically, so rotating
+  it — EDL tokens expire after ~60 days — needs no redeploy. Usable
+  ambient `EARTHDATA_*` variables take precedence over the secret. The
+  service's IAM role must allow `secretsmanager:GetSecretValue` on the
+  ARN (a plain secret name is also accepted and resolved in the default
+  region).
+- The EDL profile must have accepted the relevant DAAC EULAs; rejected
+  requests surface as HTTP 403 with the EULA URLs in the message.
+- Deployment must run in `us-west-2` (Earthdata's S3 credentials are
+  region-locked).
+
+For the CDK deployment, set `earthdata_secret_arn` in the stack's
+`AppSettings`.
+
+[earthaccess-auth]: https://github.com/earthaccess-dev/earthaccess-auth
 
 ## Development
 
@@ -105,6 +150,10 @@ To run the same deployment smoke test manually:
 ```bash
 uv run python scripts/test_deployment.py --api-url https://your-api.execute-api.us-west-2.amazonaws.com
 ```
+
+For manual checks beyond the automated tiles — the TEMPO earthdata path,
+its failure modes, and the map viewer — see
+[docs/manual-smoke-testing.md](docs/manual-smoke-testing.md).
 
 The RASI historical Icechunk store is intentionally excluded because its source data are corrupted.
 

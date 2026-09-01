@@ -21,7 +21,12 @@ from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
 from titiler.xarray.io import Reader, xarray_open_dataset
 
-from titiler.multidim.chunk_access import ChunkAccessMapping, build_virtual_chunk_access
+from titiler.multidim.chunk_access import (
+    ChunkAccessMapping,
+    build_virtual_chunk_access,
+    earthdata_endpoints,
+    parse_chunk_access,
+)
 from titiler.multidim.settings import ApiSettings
 
 api_settings = ApiSettings()
@@ -40,7 +45,10 @@ def opener_icechunk(
     authorize_virtual_chunk_access: Optional[ChunkAccessMapping] = None,
 ) -> xr.Dataset:
     """Open an IceChunk dataset using xarray."""
-    credentials = build_virtual_chunk_access(authorize_virtual_chunk_access)
+    # the config is parsed exactly once; build_virtual_chunk_access and
+    # earthdata_endpoints both consume the parsed models
+    entries = parse_chunk_access(authorize_virtual_chunk_access)
+    credentials = build_virtual_chunk_access(entries)
 
     # TODO: For future opener development. This will likely be repeated across openers. Can we somehow handle this in the Reader Class?
     parsed = urlparse(src_path)
@@ -49,12 +57,14 @@ def opener_icechunk(
     if protocol == "file":
         storage = icechunk.local_filesystem_storage(src_path)
     elif protocol == "s3":
+        bucket = parsed.netloc
+        prefix = parsed.path.lstrip(
+            "/"
+        )  # remove leading slash, this is an annoying mismatch between icechunk and urlparse
         storage = icechunk.s3_storage(
-            bucket=parsed.netloc,
-            prefix=parsed.path.lstrip(
-                "/"
-            ),  # remove leading slash, this is an annoying mismatch between icechunk and urlparse
-            from_env=True,  # we always assume that we can get credentials from env vars or IAM role for the store itself?
+            bucket=bucket,
+            prefix=prefix,
+            from_env=True,  # the store itself always uses ambient credentials
         )
     else:
         raise NotImplementedError(
@@ -72,13 +82,25 @@ def opener_icechunk(
         log_path,
         time.monotonic() - started_at,
     )
-    for prefix, container in (repo.config.virtual_chunk_containers or {}).items():
+    containers = repo.config.virtual_chunk_containers or {}
+    for prefix, container in containers.items():
         logger.info(
             "Icechunk virtual chunk container: source=%s prefix=%s store=%s",
             log_path,
             prefix,
             container.store,
         )
+    endpoints = earthdata_endpoints(
+        entries,
+        (container.url_prefix for container in containers.values()),
+    )
+    if endpoints:
+        # establish the EDL identity and surface typed errors (EULA 403s)
+        # in Python — only for containers this repo actually declares, so
+        # a repo without earthdata containers never touches EDL
+        from titiler.multidim.earthdata import prime_earthdata_endpoints
+
+        prime_earthdata_endpoints(endpoints)
     session = repo.readonly_session("main")
     store = session.store
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
@@ -121,12 +143,10 @@ def identify_storage_backend(src_path: str) -> str:
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
-        session = Session()
-        credential_provider = Boto3CredentialProvider(session)
         store = obstore.store.S3Store(
             bucket=parsed.netloc,
             prefix=parsed.path.lstrip("/"),
-            credential_provider=credential_provider,
+            credential_provider=Boto3CredentialProvider(Session()),
         )
     else:
         raise NotImplementedError(
@@ -160,7 +180,7 @@ def guess_opener(
         group: Optional group/subgroup to open
         decode_times: Whether to decode time coordinates
         authorize_virtual_chunk_access: Authorization config for icechunk virtual chunks
-        **kwargs: Additional arguments to pass to the opener
+        **kwargs: Additional arguments to pass to the opener.
 
     Returns:
         xarray.Dataset
