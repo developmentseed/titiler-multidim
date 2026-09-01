@@ -58,16 +58,19 @@ class _CloudChunkAccess(BaseModel):
 
 
 class S3ChunkAccess(_CloudChunkAccess):
-    """Options for an s3:// virtual chunk entry (icechunk.s3_credentials)."""
+    """Options for an s3:// virtual chunk entry (icechunk.s3_credentials).
+
+    ``earthdata: true`` instead fetches EDL-derived refreshable credentials
+    for the entry's bucket via earthaccess-auth's CMR bucket registry
+    (requires the bucket to be registered there and an EDL identity:
+    EARTHDATA_TOKEN or netrc).
+    """
 
     anonymous: bool | None = None
     access_key_id: str | None = None
     secret_access_key: str | None = None
     session_token: str | None = None
     earthdata: bool | None = None
-    """Fetch EDL-derived refreshable credentials for the entry's bucket via
-    earthaccess-auth's CMR bucket registry (requires the bucket to be
-    registered there and an EDL identity: EARTHDATA_TOKEN or netrc)."""
 
     @model_validator(mode="after")
     def _earthdata_is_exclusive(self) -> "S3ChunkAccess":

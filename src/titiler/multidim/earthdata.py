@@ -43,10 +43,12 @@ rotation resumes quickly, but not so soon it hammers Secrets Manager on
 every request."""
 
 _next_refresh: float | None = None
-"""monotonic deadline for the next secret check; None = never checked,
+"""Monotonic deadline for the next secret check; None = never checked,
 math.inf = latched permanently (ambient identity, or no ARN configured)."""
 
 _last_secret: str | None = None
+"""The last successfully applied secret string; an unchanged secret on
+refresh skips re-applying (and re-probing) the identity."""
 
 
 def _usable_env_identity() -> bool:
@@ -248,7 +250,7 @@ def _swap_env(new: dict[str, str]) -> dict[str, str]:
 
 
 def prime_earthdata_endpoints(endpoints) -> None:
-    """Establish the EDL identity and warm the credential cache in Python.
+    """Establish the EDL identity and warm the credential cache in the Python layer.
 
     Runs before icechunk's Rust layer can invoke the refreshable
     credential callable: Rust re-wraps whatever the callable raises as an
