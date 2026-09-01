@@ -58,16 +58,19 @@ class _CloudChunkAccess(BaseModel):
 
 
 class S3ChunkAccess(_CloudChunkAccess):
-    """Options for an s3:// virtual chunk entry (icechunk.s3_credentials)."""
+    """Options for an s3:// virtual chunk entry (icechunk.s3_credentials).
+
+    ``earthdata: true`` instead fetches EDL-derived refreshable credentials
+    for the entry's bucket via earthaccess-auth's CMR bucket registry
+    (requires the bucket to be registered there and an EDL identity:
+    EARTHDATA_TOKEN or netrc).
+    """
 
     anonymous: bool | None = None
     access_key_id: str | None = None
     secret_access_key: str | None = None
     session_token: str | None = None
     earthdata: bool | None = None
-    """Fetch EDL-derived refreshable credentials for the entry's bucket via
-    earthaccess-auth's CMR bucket registry (requires the bucket to be
-    registered there and an EDL identity: EARTHDATA_TOKEN or netrc)."""
 
     @model_validator(mode="after")
     def _earthdata_is_exclusive(self) -> "S3ChunkAccess":
@@ -90,6 +93,10 @@ class S3ChunkAccess(_CloudChunkAccess):
         Pure local construction, no network I/O: EDL identity and
         credential priming happen in the opener, and only for containers
         the opened repository actually declares (see earthdata_endpoints).
+
+        Args:
+            prefix: The entry's container URL prefix; earthdata entries
+                resolve it to a DAAC via the CMR bucket registry.
         """
         if self.earthdata:
             # import lazy: earthaccess-auth is absent in the CDK deployment
@@ -228,13 +235,21 @@ def earthdata_endpoints(
     entries: Mapping[str, AnyChunkAccess],
     declared_prefixes: Iterable[str],
 ) -> list[str]:
-    """`s3credentials` endpoints for earthdata entries a repo declares.
+    """Collect the ``s3credentials`` endpoints for earthdata entries a repo declares.
 
-    Takes already-parsed entries (see parse_chunk_access) so callers that
-    also build credentials parse the config once. Only entries whose prefix
-    matches a virtual chunk container the opened repository actually
-    declares are resolved, so an earthdata entry for another repo's bucket
-    never couples this open to Earthdata Login availability or EULA state.
+    Only entries whose prefix matches a virtual chunk container the opened
+    repository actually declares are resolved, so an earthdata entry for
+    another repo's bucket never couples this open to Earthdata Login
+    availability or EULA state.
+
+    Args:
+        entries: Already-parsed entries (see parse_chunk_access), so
+            callers that also build credentials parse the config once.
+        declared_prefixes: URL prefixes of the virtual chunk containers
+            the opened repository declares.
+
+    Returns:
+        Sorted ``s3credentials`` endpoint URLs.
     """
     declared = set(declared_prefixes)
     endpoints = set()
@@ -253,10 +268,12 @@ def build_virtual_chunk_access(
 ) -> Optional[Dict[str, Optional[icechunk.AnyCredential]]]:
     """Translate parsed virtual chunk access entries into icechunk credentials.
 
-    Takes already-parsed entries (see parse_chunk_access, which rejects
-    file://, unknown schemes, and unrecognized options) so callers parse
-    the config exactly once; each entry builds its own icechunk credential
-    via to_credential().
+    Each entry builds its own icechunk credential via to_credential().
+
+    Args:
+        entries: Already-parsed entries (see parse_chunk_access, which
+            rejects file://, unknown schemes, and unrecognized options),
+            so callers parse the config exactly once.
 
     Returns:
         The mapping for Repository.open(authorize_virtual_chunk_access), or

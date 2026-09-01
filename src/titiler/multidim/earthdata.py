@@ -43,18 +43,23 @@ rotation resumes quickly, but not so soon it hammers Secrets Manager on
 every request."""
 
 _next_refresh: float | None = None
-"""monotonic deadline for the next secret check; None = never checked,
+"""Monotonic deadline for the next secret check; None = never checked,
 math.inf = latched permanently (ambient identity, or no ARN configured)."""
 
 _last_secret: str | None = None
+"""The last successfully applied secret string; an unchanged secret on
+refresh skips re-applying (and re-probing) the identity."""
 
 
 def _usable_env_identity() -> bool:
-    """True if the environment holds credentials earthaccess-auth can use.
+    """Check whether the environment holds credentials earthaccess-auth can use.
 
     Mirrors the environment login strategy's requirement (a truthy token,
     or truthy username AND password) — key presence alone must not
     suppress the Secrets Manager fallback.
+
+    Returns:
+        True if the environment forms a usable identity.
     """
     env = os.environ
     return bool(
@@ -72,6 +77,10 @@ def _rebuild_default_auth() -> None:
     (and its per-endpoint credential cache) for every consumer, including
     the refreshable credential callables icechunk holds inside a dataset —
     they call default_manager() at module level, not a captured instance.
+
+    Raises:
+        LoginStrategyUnavailable: When the login fails or yields no usable
+            identity (sanitized; the raw error goes to the service log).
     """
     from earthaccess_auth.auth import Auth
     from earthaccess_auth.credentials import S3CredentialManager, set_default_manager
@@ -108,12 +117,14 @@ def _probe_identity(manager) -> None:
     EDL marks any non-empty token authenticated without a network call, so
     a rotated-to-garbage token would otherwise install and latch (the
     unchanged secret then short-circuits every later refresh). Probe one
-    configured earthdata endpoint through `manager` (an
-    S3CredentialManager wrapping the candidate identity): only a 401
-    rejects it — an unaccepted EULA (403), a DAAC outage, an older
+    configured earthdata endpoint through ``manager``: only a 401 rejects
+    it — an unaccepted EULA (403), a DAAC outage, an older
     earthaccess-auth without status_code, or no configured earthdata
-    entries are not evidence the credentials are bad. A successful probe
-    leaves the credentials cached in `manager`.
+    entries are not evidence the credentials are bad.
+
+    Args:
+        manager: An S3CredentialManager wrapping the candidate identity.
+            A successful probe leaves the credentials cached in it.
 
     Raises:
         LoginStrategyUnavailable: On a definitive 401 (sanitized; the
@@ -142,7 +153,7 @@ def _probe_identity(manager) -> None:
 
 
 def _configured_earthdata_endpoints() -> list[str]:
-    """`s3credentials` endpoints of every configured earthdata entry."""
+    """Return the ``s3credentials`` endpoints of every configured earthdata entry."""
     from titiler.multidim.chunk_access import earthdata_endpoints
     from titiler.multidim.settings import ApiSettings
 
@@ -155,9 +166,11 @@ def _configured_earthdata_endpoints() -> list[str]:
 def _secrets_client(secret_id: str):
     """Build a Secrets Manager client in the secret's own region.
 
-    Full ARN shape: arn:aws:secretsmanager:<region>:<account>:secret:<name>.
-    A plain secret name (no colons) is also a valid SecretId; it resolves
-    in boto3's default region.
+    Args:
+        secret_id: A full ARN
+            (arn:aws:secretsmanager:<region>:<account>:secret:<name>), or
+            a plain secret name (no colons), also a valid SecretId, which
+            resolves in boto3's default region.
     """
     import boto3
 
@@ -174,6 +187,9 @@ def _parse_secret(secret_string: str) -> dict[str, str]:
     would shadow a working username/password with an empty bearer token,
     and a JSON null would export the literal string "None" — a truthy,
     unusable identity that latches permanently.
+
+    Returns:
+        The EARTHDATA_* variables forming a usable identity.
 
     Raises:
         LoginStrategyUnavailable: If no usable value survives.
@@ -208,7 +224,7 @@ def _parse_secret(secret_string: str) -> dict[str, str]:
 
 
 def _swap_env(new: dict[str, str]) -> dict[str, str]:
-    """Replace the EARTHDATA_* environment identity; return the old one.
+    """Replace the EARTHDATA_* environment identity.
 
     New keys are written before stale ones are removed, so a concurrent
     reader (e.g. earthaccess-auth's environment strategy inside another
@@ -217,6 +233,9 @@ def _swap_env(new: dict[str, str]) -> dict[str, str]:
     swap can briefly see a mixed identity (e.g. new username with the old
     password), failing that one request with a transient login error that
     self-heals on the next.
+
+    Returns:
+        The previous EARTHDATA_* values, for restoring on a failed swap.
     """
     # ponytail: per-key os.environ writes; true atomicity would need every
     # reader to take a shared lock, which earthaccess-auth's env strategy
@@ -231,7 +250,7 @@ def _swap_env(new: dict[str, str]) -> dict[str, str]:
 
 
 def prime_earthdata_endpoints(endpoints) -> None:
-    """Establish the EDL identity and warm the credential cache in Python.
+    """Establish the EDL identity and warm the credential cache in the Python layer.
 
     Runs before icechunk's Rust layer can invoke the refreshable
     credential callable: Rust re-wraps whatever the callable raises as an
@@ -321,11 +340,14 @@ def ensure_earthdata_credentials() -> None:
 def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
     """Handle a failed GetSecretValue; call with ``_lock`` held.
 
-    Returns when an identity can keep serving (a warm refreshed one, or an
-    ambient env fallback on first load), raising the sanitized typed error
-    only when there is nothing to fall back to. First loads back off
+    Returns normally when an identity can keep serving (a warm refreshed
+    one, or an ambient env fallback on first load). First loads back off
     ``_RETRY_INTERVAL`` so a misconfigured deployment doesn't turn every
     request into a Secrets Manager call serialized on the module lock.
+
+    Raises:
+        LoginStrategyUnavailable: When there is nothing to fall back to
+            (sanitized; details go to the service log).
     """
     global _next_refresh
     # str() of this exception is returned to unauthenticated HTTP clients
@@ -362,16 +384,18 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
 
 
 def _secret_arn_unless_latched() -> str | None:
-    """Return the configured secret ARN, or None after latching.
+    """Read the configured secret ARN; call with ``_lock`` held.
 
     Configuring an ARN is an explicit operator action, so the secret is
     authoritative: a stale-but-truthy ambient ``EARTHDATA_*`` identity
     must not latch and silently disable rotation-without-restart (the
     ambient identity still serves as a fallback while the secret is
     unreachable, and outright when no ARN is configured — local
-    development, tests, netrc setups). Latches ``_next_refresh``
-    permanently (returning None) when no ARN is configured. Call with
-    ``_lock`` held.
+    development, tests, netrc setups).
+
+    Returns:
+        The configured secret ARN, or None when no ARN is configured — in
+        which case ``_next_refresh`` latches permanently.
     """
     global _next_refresh
     from titiler.multidim.settings import ApiSettings
@@ -391,10 +415,15 @@ def _apply_secret(secret: str, rotating: bool) -> bool:
     the default manager from a fallback identity (ambient env vars,
     netrc), which must not keep shadowing the secret's identity.
 
-    Returns False when applying a *rotation* failed: the previous identity
-    (env vars plus the warm default auth manager built around them, EDL
-    tokens live ~60 days) was restored and keeps serving. A failed first
-    load raises instead — there is nothing to fall back to.
+    Returns:
+        False when applying a *rotation* failed: the previous identity
+        (env vars plus the warm default auth manager built around them,
+        EDL tokens live ~60 days) was restored and keeps serving. True
+        otherwise.
+
+    Raises:
+        LoginStrategyUnavailable: On a failed *first* load — there is
+            nothing to fall back to.
     """
     try:
         new_env = _parse_secret(secret)
