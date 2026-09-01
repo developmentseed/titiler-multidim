@@ -109,7 +109,7 @@ def opener_icechunk(
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
     started_at = time.monotonic()
     dataset = xr.open_dataset(
-        store,
+        store,  # type: ignore[arg-type]  # the zarr engine accepts stores; xarray's hints don't
         group=group,
         decode_times=decode_times,
         engine="zarr",
@@ -143,6 +143,7 @@ def identify_storage_backend(src_path: str) -> str:
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
 
+    store: obstore.store.LocalStore | obstore.store.S3Store
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":

@@ -102,7 +102,7 @@ class DatasetMetadataExtension(ValidateExtension):
         ):
             """Validate variables in one Xarray Dataset."""
             with self.dataset_opener(src_path, **io_params.as_dict()) as ds:
-                variables = variables or list(ds.data_vars)
+                variables = variables or [str(name) for name in ds.data_vars]
                 return {
                     variable: self._validate_variable(ds[variable])
                     for variable in variables

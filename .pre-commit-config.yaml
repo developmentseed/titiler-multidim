@@ -21,6 +21,7 @@ repos:
         exclude: tests/.*
         additional_dependencies:
         - icechunk
+        - titiler-xarray
         - types-attrs
         - types-requests
         - boto3-stubs
