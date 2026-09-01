@@ -858,7 +858,7 @@ wheels = [
 
 [[package]]
 name = "dask"
-version = "2026.7.1"
+version = "2026.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -869,9 +869,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "toolz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/39/cbd21c9133d02b4e60899ed466ad5e876553ea68ebffee6209e7dcafc8d4/dask-2026.7.1.tar.gz", hash = "sha256:5727484427665f051e86bf87d021a64d6411141cdc8a20bfe3c1ad2968cc06b7", size = 11548794, upload-time = "2026-07-14T01:06:22.46Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/a7/6b3c7ac32b642fbbe0821111654e0bd8cfbe88f68560bcf23cc78ab35c71/dask-2026.8.0.tar.gz", hash = "sha256:8a94c37b5de6d869343340dc26c3c3acca7ec48a3abdabe00ea3abb1125884d5", size = 11561752, upload-time = "2026-08-24T19:21:25.906Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/5f/7c22733da92b3a6cc4dddcaa8731089d213c2790bbc997e51c429a4e8f8b/dask-2026.7.1-py3-none-any.whl", hash = "sha256:985ffd6c5e9d7979ede515e84ae8d39b647d6aa64f77600f15714ff65f578fe6", size = 1496882, upload-time = "2026-07-14T01:06:20.341Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/3a/4fc99e788bcfa1b3b3f21abf57da45898d807d007e7f6fd1c7300904eb70/dask-2026.8.0-py3-none-any.whl", hash = "sha256:ccc0c83a189b0398602435189771d28dad7b5773b6089bb8dce14ae732dd782c", size = 1492182, upload-time = "2026-08-24T19:21:23.997Z" },
 ]
 
 [[package]]
@@ -1587,14 +1587,14 @@ wheels = [
 
 [[package]]
 name = "mangum"
-version = "0.21.0"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/cb/d9f4d685a0b8eceac10991e15ac471d9568e4e42c2489ae9bf072828c1c2/mangum-0.21.0.tar.gz", hash = "sha256:e31ed72d67f9958fa4379f65df77729906dec6dfa00afa6ed4e06c77833000de", size = 89130, upload-time = "2026-02-01T17:17:42.816Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/c8/1579c705908d02a4526a748e8d0f0419151d4498c59033840f5df3a14822/mangum-0.22.0.tar.gz", hash = "sha256:701936891aaed8ed66479b871c2bda87ba288fd01c7d5dd6ba6c8e9ba1c239d1", size = 118290, upload-time = "2026-08-22T12:54:48.396Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/50/e3c694b8e122551e4557450219283771334dee2ed5734a8398c8b8018c50/mangum-0.21.0-py3-none-any.whl", hash = "sha256:309e48f5c629542516c5106ecf079f4ec08809ed50df882238d98fe1392820c7", size = 17146, upload-time = "2026-02-01T17:17:41.553Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/a2/21ee5d457ae79a2587ff0d4652990670b7cac84ba0eaab6e6865a3bd2515/mangum-0.22.0-py3-none-any.whl", hash = "sha256:a0595e3cc7a8091b22d8b3997bab5b2ad6aae7a5e40865e19c2015f5c959a93b", size = 17143, upload-time = "2026-08-22T12:54:46.924Z" },
 ]
 
 [[package]]
@@ -3400,7 +3400,7 @@ requires-dist = [
     { name = "h5netcdf" },
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "icechunk", specifier = ">=2.1,<3" },
-    { name = "mangum", marker = "extra == 'lambda'", specifier = "==0.21.0" },
+    { name = "mangum", marker = "extra == 'lambda'", specifier = "==0.22.0" },
     { name = "numpy" },
     { name = "obstore", specifier = ">=0.9.4" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'lambda'", specifier = ">=1.40.0" },
