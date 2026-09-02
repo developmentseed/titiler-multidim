@@ -183,5 +183,12 @@ for key, value in {
     if value:
         Tags.of(lambda_stack).add(key, value)
 
+if stack_settings.permissions_boundary_policy_name:
+    boundary = iam.ManagedPolicy.from_managed_policy_name(
+        lambda_stack,
+        "permissions-boundary",
+        stack_settings.permissions_boundary_policy_name,
+    )
+    iam.PermissionsBoundary.of(lambda_stack).apply(boundary)
 
 app.synth()
