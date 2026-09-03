@@ -3,7 +3,15 @@
 import os
 from typing import Any, Dict, Optional
 
-from aws_cdk import App, CfnOutput, Duration, Stack, Tags, aws_lambda
+from aws_cdk import (
+    App,
+    CfnOutput,
+    Duration,
+    PermissionsBoundary,
+    Stack,
+    Tags,
+    aws_lambda,
+)
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_cloudwatch_actions as cloudwatch_actions
@@ -173,6 +181,18 @@ lambda_stack = LambdaStack(
     timeout=app_settings.timeout,
     concurrent=app_settings.max_concurrent,
     environment=app_settings.additional_env,
+lambda_stack = LambdaStack(
+    app,
+    f"{stack_settings.titiler_multidim_stack_name}-{stack_settings.stage}",
+    memory=10240,
+    timeout=app_settings.timeout,
+    concurrent=app_settings.max_concurrent,
+    environment=app_settings.additional_env,
+    permissions_boundary=(
+        PermissionsBoundary.from_name(stack_settings.permissions_boundary_policy_name)
+        if stack_settings.permissions_boundary_policy_name
+        else None
+    ),
 )
 # Tag infrastructure
 for key, value in {
@@ -183,12 +203,5 @@ for key, value in {
     if value:
         Tags.of(lambda_stack).add(key, value)
 
-if stack_settings.permissions_boundary_policy_name:
-    boundary = iam.ManagedPolicy.from_managed_policy_name(
-        lambda_stack,
-        "permissions-boundary",
-        stack_settings.permissions_boundary_policy_name,
-    )
-    iam.PermissionsBoundary.of(lambda_stack).apply(boundary)
 
 app.synth()
