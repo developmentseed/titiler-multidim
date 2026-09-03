@@ -79,6 +79,17 @@ def values_match(api_value: Any, expected: float) -> bool:
     return float(api_value) == float(expected)
 
 
+def check_unpacked(data: h5py.Dataset, variable: str) -> None:
+    """Abort on CF-packed variables: raw values can't equal decoded ones."""
+    packed = sorted({"scale_factor", "add_offset"} & set(data.attrs))
+    if packed:
+        raise SystemExit(
+            f"variable {variable!r} is CF-packed ({', '.join(packed)}); "
+            "/point serves decoded values, so every raw-vs-API comparison "
+            "would be a false mismatch — refusing to run"
+        )
+
+
 def source_dataset(h5: h5py.File, name: str) -> h5py.Dataset | None:
     """Find the source dataset behind a flattened variable name."""
     if name in h5:
@@ -186,6 +197,7 @@ def check_time(
         data = source_dataset(h5, variable)
         if data is None:
             return [f"{iso}: variable {variable!r} missing from {granule_url}"]
+        check_unpacked(data, variable)
         latitude = np.asarray(h5["latitude"])
         longitude = np.asarray(h5["longitude"])
         fill = data.attrs.get("_FillValue")

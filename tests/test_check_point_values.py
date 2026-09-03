@@ -6,6 +6,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
@@ -94,3 +95,16 @@ def test_granule_time_matches():
     assert cpv.granule_time_matches(seconds, units, iso)
     assert cpv.granule_time_matches(seconds + 0.5, units, iso)
     assert not cpv.granule_time_matches(seconds + 600, units, iso)
+
+
+def test_check_unpacked_refuses_scaled_variables():
+    with h5py.File(io.BytesIO(), "w") as h5:
+        ds = h5.create_dataset("v", data=np.zeros(2, dtype="int16"))
+        ds.attrs["scale_factor"] = np.float32(0.5)
+        with pytest.raises(SystemExit, match="CF-packed"):
+            cpv.check_unpacked(ds, "v")
+
+
+def test_check_unpacked_accepts_plain_variables():
+    with h5py.File(io.BytesIO(), "w") as h5:
+        cpv.check_unpacked(h5.create_dataset("v", data=np.zeros(2, "float32")), "v")
