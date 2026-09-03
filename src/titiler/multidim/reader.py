@@ -257,7 +257,11 @@ class XarrayReader(Reader):
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
         super().__attrs_post_init__()
-        self._apply_where()
+        try:
+            self._apply_where()
+        except Exception:
+            self.ds.close()
+            raise
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
             log_path,
@@ -268,13 +272,16 @@ class XarrayReader(Reader):
         """Mask the selected variable by the `where` conditions.
 
         Each condition is `{variable}{op}{number}` against another variable
-        of the same dataset, extracted with the same `sel` selectors so the
-        mask and the data describe the same slice. Conditions are ANDed;
-        failing pixels become NaN and follow the normal nodata path.
+        of the same dataset, extracted with the request's `sel` selectors
+        (restricted to the dimensions each mask variable has) so the mask
+        and the data describe the same slice. Conditions are ANDed; failing
+        pixels become NaN and follow the normal nodata path. The involved
+        variables are dask-chunked by their on-disk chunking, so masking
+        stays lazy until the windowed read.
         """
         if not self.where:
             return
-        mask = None
+        conditions = []
         for condition in self.where:
             parsed = _WHERE_CONDITION.match(condition)
             if not parsed:
@@ -289,12 +296,31 @@ class XarrayReader(Reader):
                     f"Invalid where condition {condition!r}: variable "
                     f"{name!r} not found in the dataset"
                 )
+            conditions.append((condition, name, parsed["op"], float(parsed["value"])))
+
+        # Chunk the involved variables by their on-disk chunking (dask stays
+        # lazy) so the comparisons and the mask defer all reads to the
+        # windowed read path instead of materializing the full slice here on
+        # every request, /tilejson.json and /info included.
+        ds = self.ds.copy()
+        for name in {self.variable, *(name for _, name, _, _ in conditions)}:
+            da = ds[name]
+            if da.chunks is None:
+                preferred = da.encoding.get("preferred_chunks") or {}
+                ds[name] = da.chunk({d: preferred.get(d, "auto") for d in da.dims})
+
+        mask = None
+        for condition, name, op, value in conditions:
+            # a mask may legitimately lack some of the request's dimensions
+            # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
+            # only the selectors whose dimension the mask variable has
+            sel = [s for s in self.sel or [] if s.split("=", 1)[0] in ds[name].dims]
             try:
-                da = get_variable(self.ds, name, sel=self.sel)
-            except (KeyError, AssertionError) as e:
+                da = get_variable(ds, name, sel=sel)
+            except (KeyError, AssertionError, ValueError) as e:
                 raise BadRequestError(
-                    f"Invalid where condition {condition!r}: {name!r} does "
-                    "not accept this request's `sel` selectors"
+                    f"Invalid where condition {condition!r}: {name!r} cannot "
+                    f"mask {self.variable!r} for this request"
                 ) from e
             extra_dims = set(da.dims) - set(self.input.dims)
             if extra_dims:
@@ -303,9 +329,9 @@ class XarrayReader(Reader):
                     f"dimensions {sorted(map(str, extra_dims))} that "
                     f"{self.variable!r} does not"
                 )
-            comparison = _WHERE_OPS[parsed["op"]](da, float(parsed["value"]))
+            comparison = _WHERE_OPS[op](da, value)
             mask = comparison if mask is None else mask & comparison
-        self.input = self.input.where(mask)
+        self.input = get_variable(ds, self.variable, sel=self.sel).where(mask)
 
     @classmethod
     def list_variables(

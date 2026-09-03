@@ -129,3 +129,69 @@ def test_opener_icechunk_skips_earthdata_for_undeclared_containers(monkeypatch):
     }
     reader.opener_icechunk("file:///tmp/repo", authorize_virtual_chunk_access=access)
     assert primed == []
+
+
+class TestApplyWhere:
+    """Behavior of the `where` masking at the reader level."""
+
+    @pytest.fixture
+    def store(self, tmp_path_factory):
+        """A zarr store with 3D data, a 2D mask, and a 1D variable."""
+        rng = np.random.default_rng(42)
+        lat = np.linspace(-85.0, 85.0, 18)
+        lon = np.linspace(-175.0, 175.0, 36)
+        ds = xr.Dataset(
+            {
+                "data": (("time", "lat", "lon"), rng.random((4, 18, 36))),
+                "mask2d": (("lat", "lon"), rng.random((18, 36))),
+                "line": (("time",), np.arange(4.0)),
+            },
+            coords={"time": np.arange(4), "lat": lat, "lon": lon},
+        )
+        path = str(tmp_path_factory.mktemp("where") / "store.zarr")
+        ds.chunk({"time": 1, "lat": 9, "lon": 9}).to_zarr(path, consolidated=False)
+        return path
+
+    def _reader(self, store, **kwargs):
+        return reader.XarrayReader(
+            src_path=store,
+            variable="data",
+            decode_times=False,
+            sel=["time=0"],
+            **kwargs,
+        )
+
+    def test_non_spatial_condition_variable_is_a_400(self, store):
+        """A 0/1-D condition variable must raise BadRequestError, not ValueError."""
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="line"):
+            self._reader(store, where=["line>0"])
+
+    def test_mask_without_selector_dims_is_accepted(self, store):
+        """A (lat, lon) mask must work even when the request selects on time."""
+        with self._reader(store, where=["mask2d>=0"]) as src:
+            assert src.point(0, 0).array[0] is not np.ma.masked
+
+    def test_dataset_closed_when_where_is_invalid(self, store, monkeypatch):
+        """A 400 raised by _apply_where must not leak the opened dataset."""
+        from titiler.core.errors import BadRequestError
+
+        closed = []
+        real_opener = reader.guess_opener
+
+        def spy_opener(*args, **kwargs):
+            ds = real_opener(*args, **kwargs)
+            real_close = ds._close
+            ds.set_close(lambda: (closed.append(True), real_close and real_close()))
+            return ds
+
+        monkeypatch.setattr(reader, "guess_opener", spy_opener)
+        with pytest.raises(BadRequestError):
+            self._reader(store, where=["data=1"])
+        assert closed == [True]
+
+    def test_where_masking_stays_lazy(self, store):
+        """Masking must not materialize the full slice at reader construction."""
+        with self._reader(store, where=["mask2d>=0.5"]) as src:
+            assert not src.input._in_memory
