@@ -140,6 +140,9 @@ class TestApplyWhere:
         rng = np.random.default_rng(42)
         lat = np.linspace(-85.0, 85.0, 18)
         lon = np.linspace(-175.0, 175.0, 36)
+        flag = np.zeros((18, 36))
+        flag[0, 0] = np.nan
+        flag[0, 1] = 1.0
         ds = xr.Dataset(
             {
                 "data": (("time", "lat", "lon"), rng.random((4, 18, 36))),
@@ -149,6 +152,8 @@ class TestApplyWhere:
                 # latitude/longitude to y/x too, so only coordinate values
                 # distinguish it from the data's grid
                 "offgrid": (("latitude", "longitude"), rng.random((18, 36))),
+                # 0 = good, 1 = bad, NaN at [0, 0] = no retrieval (fill)
+                "flag": (("lat", "lon"), flag),
             },
             coords={
                 "time": np.arange(4),
@@ -239,3 +244,10 @@ class TestApplyWhere:
         ):
             assert plain.input.encoding  # fixture must actually carry encoding
             assert encodings_equal(masked.input.encoding, plain.input.encoding)
+
+    def test_fill_in_condition_variable_fails_the_filter(self, store):
+        """NaN != 1 is True, so without a notnull guard a no-retrieval
+        pixel passes `flag!=1` while failing the equivalent `flag==0`."""
+        with self._reader(store, where=["flag!=1"]) as src:
+            # [0, 0] is lat=-85, lon=-175, where flag is NaN (fill)
+            assert src.point(-175.0, -85.0).array[0] is np.ma.masked

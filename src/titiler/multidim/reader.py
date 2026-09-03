@@ -342,7 +342,10 @@ class XarrayReader(Reader):
                     f"Invalid where condition {condition!r}: {name!r} "
                     f"coordinates do not match {self.variable!r}'s"
                 ) from e
-            comparison = _WHERE_OPS[op](da, value)
+            # NaN compares False for every operator except != — without
+            # this a fill pixel in the flag variable passes `flag!=1`
+            # while failing the equivalent `flag==0`
+            comparison = _WHERE_OPS[op](da, value) & da.notnull()
             mask = comparison if mask is None else mask & comparison
         masked = data.where(mask)
         # .where() drops encoding, and with it rio.nodata (read from
