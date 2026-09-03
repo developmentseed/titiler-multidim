@@ -251,10 +251,17 @@ def earthdata_endpoints(
     Returns:
         Sorted ``s3credentials`` endpoint URLs.
     """
-    declared = set(declared_prefixes)
+    # icechunk normalizes container prefixes and credential-map keys with a
+    # trailing slash before matching them, so compare the same way: an entry
+    # differing only by that slash still credentials the virtual reads
+    declared = {p.rstrip("/") + "/" for p in declared_prefixes}
     endpoints = set()
     for prefix, entry in entries.items():
-        if isinstance(entry, S3ChunkAccess) and entry.earthdata and prefix in declared:
+        if (
+            isinstance(entry, S3ChunkAccess)
+            and entry.earthdata
+            and prefix.rstrip("/") + "/" in declared
+        ):
             from earthaccess_auth.daac import resolve_bucket
 
             info = resolve_bucket(prefix)
