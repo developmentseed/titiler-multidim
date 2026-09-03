@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     import icechunk
 
 
+def _add_trailing(prefix: str) -> str:
+    """Normalize like icechunk's add_trailing: append '/' only if absent."""
+    return prefix if prefix.endswith("/") else prefix + "/"
+
+
 class _CloudChunkAccess(BaseModel):
     """Options shared by the cloud (s3/gcs/azure) virtual chunk entries.
 
@@ -189,13 +194,15 @@ def parse_chunk_access(
                 f"unsupported scheme {scheme!r} for virtual chunk entry {prefix!r}"
             )
         # urlparse lowercases the scheme, but icechunk matches container
-        # prefixes character for character, so an entry spelled 'S3://…'
-        # would validate here yet never match at request time
+        # prefixes byte for byte apart from appending a missing trailing
+        # slash, so an entry spelled 'S3://…' would validate here yet
+        # never match at request time
         if not prefix.startswith(f"{scheme}://"):
             raise ValueError(
                 f"virtual chunk entry {prefix!r} must begin with lowercase "
                 f"'{scheme}://'; icechunk matches container prefixes by exact "
-                "string, so other spellings are silently ignored"
+                "string (apart from a trailing slash), so other spellings are "
+                "silently ignored"
             )
         if isinstance(options, BaseModel):
             if not isinstance(options, model):
@@ -227,7 +234,9 @@ def parse_chunk_access(
                     "but its bucket is not in the CMR-derived bucket registry"
                 )
 
-        parsed[prefix] = entry
+        # store keys the way icechunk stores credential keys (add_trailing:
+        # append-only, never collapsing), so matching stays byte-identical
+        parsed[_add_trailing(prefix)] = entry
     return parsed
 
 
@@ -251,16 +260,17 @@ def earthdata_endpoints(
     Returns:
         Sorted ``s3credentials`` endpoint URLs.
     """
-    # icechunk normalizes container prefixes and credential-map keys with a
-    # trailing slash before matching them, so compare the same way: an entry
-    # differing only by that slash still credentials the virtual reads
-    declared = {p.rstrip("/") + "/" for p in declared_prefixes}
+    # icechunk appends a missing trailing slash to container prefixes and
+    # credential keys (append-only — a doubled slash is preserved and
+    # simply never matches); entries were normalized the same way at parse
+    # time, so a plain membership test reproduces icechunk's matching
+    declared = {_add_trailing(p) for p in declared_prefixes}
     endpoints = set()
     for prefix, entry in entries.items():
         if (
             isinstance(entry, S3ChunkAccess)
             and entry.earthdata
-            and prefix.rstrip("/") + "/" in declared
+            and prefix in declared
         ):
             from earthaccess_auth.daac import resolve_bucket
 

@@ -316,3 +316,13 @@ def test_earthdata_endpoints_ignore_trailing_slash_mismatch():
     assert earthdata_endpoints(entries, [REGISTRY_PREFIX.rstrip("/")]) == [
         PODAAC_ENDPOINT
     ]
+
+
+def test_earthdata_endpoints_doubled_slash_does_not_match():
+    """icechunk's add_trailing only appends — it never collapses '//' — so
+    an entry differing by a doubled slash must not prime endpoints for a
+    credential icechunk will never apply."""
+    from titiler.multidim.chunk_access import earthdata_endpoints, parse_chunk_access
+
+    entries = parse_chunk_access({REGISTRY_PREFIX + "/": {"earthdata": True}})
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX]) == []
