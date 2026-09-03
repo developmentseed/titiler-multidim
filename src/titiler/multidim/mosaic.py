@@ -56,8 +56,12 @@ class XarrayMosaicBackend(BaseBackend):
         self.minzoom = min(zoom[0] for zoom in zooms)
         self.maxzoom = max(zoom[1] for zoom in zooms)
 
-    def info(self) -> dict[str, Any]:
-        """Return native metadata for one source or shared metadata for a mosaic."""
+    def info(self) -> dict[str, Any]:  # type: ignore[override]
+        """Return native metadata for one source or shared metadata for a mosaic.
+
+        Deliberately returns plain dicts rather than the base classes'
+        Info models: the factory mutates the result (`count`/`times`).
+        """
         if len(self._asset_info) == 1:
             return self._asset_info[0]
 

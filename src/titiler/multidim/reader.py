@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import operator
 import os
+import re
 import time
 from typing import (
     Any,
@@ -19,7 +21,8 @@ import obstore
 import xarray as xr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from titiler.xarray.io import Reader, xarray_open_dataset
+from titiler.core.errors import BadRequestError
+from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
     ChunkAccessMapping,
@@ -106,7 +109,7 @@ def opener_icechunk(
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
     started_at = time.monotonic()
     dataset = xr.open_dataset(
-        store,
+        store,  # type: ignore[arg-type]  # the zarr engine accepts stores; xarray's hints don't
         group=group,
         decode_times=decode_times,
         engine="zarr",
@@ -140,6 +143,7 @@ def identify_storage_backend(src_path: str) -> str:
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
 
+    store: obstore.store.LocalStore | obstore.store.S3Store
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
@@ -224,9 +228,32 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
+_WHERE_CONDITION = re.compile(
+    r"^\s*(?P<variable>[\w.-]+)\s*(?P<op>==|!=|<=|>=|<|>)\s*"
+    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+)
+
+_WHERE_OPS: Dict[str, Any] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+}
+
+# Chunk size for where-involved variables with no on-disk chunking
+# (contiguous NetCDF): dask "auto" would make one whole-variable chunk,
+# turning every windowed read into a full read.
+# ponytail: fixed 1024 fallback; make it a setting if a store needs tuning
+_FALLBACK_CHUNK = 1024
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with Icechunk and virtual chunk support."""
+
+    where: Optional[List[str]] = attr.ib(default=None, kw_only=True)
 
     def __attrs_post_init__(self):
         """Configure the custom opener before the parent reads the dataset."""
@@ -236,11 +263,106 @@ class XarrayReader(Reader):
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
         super().__attrs_post_init__()
+        try:
+            self._apply_where()
+        except Exception:
+            self.ds.close()
+            raise
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
             log_path,
             time.monotonic() - started_at,
         )
+
+    def _apply_where(self) -> None:  # noqa: C901
+        """Mask the selected variable by the `where` conditions.
+
+        Each condition is `{variable}{op}{number}` against another variable
+        of the same dataset, extracted with the request's `sel` selectors
+        (restricted to the dimensions each mask variable has) so the mask
+        and the data describe the same slice. Conditions are ANDed; failing
+        pixels become NaN and follow the normal nodata path. The involved
+        variables are dask-chunked by their on-disk chunking, so masking
+        stays lazy until the windowed read. Masked pixels become NaN, so
+        integer variables are upcast to float by .where().
+        """
+        if not self.where:
+            return
+        conditions = []
+        for condition in self.where:
+            parsed = _WHERE_CONDITION.match(condition)
+            if not parsed:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: expected "
+                    "`{variable}{op}{number}` with op one of "
+                    f"{', '.join(_WHERE_OPS)}"
+                )
+            name = parsed["variable"]
+            if name not in self.ds:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: variable "
+                    f"{name!r} not found in the dataset"
+                )
+            conditions.append((condition, name, parsed["op"], float(parsed["value"])))
+
+        # Chunk the involved variables by their on-disk chunking (dask stays
+        # lazy) so the comparisons and the mask defer all reads to the
+        # windowed read path instead of materializing the full slice here on
+        # every request, /tilejson.json and /info included.
+        ds = self.ds.copy()
+        for name in {self.variable, *(name for _, name, _, _ in conditions)}:
+            da = ds[name]
+            if da.chunks is None:
+                preferred = da.encoding.get("preferred_chunks") or dict(
+                    zip(da.dims, da.encoding.get("chunksizes") or ())
+                )
+                ds[name] = da.chunk(
+                    {d: preferred.get(d, _FALLBACK_CHUNK) for d in da.dims}
+                )
+
+        data = get_variable(ds, self.variable, sel=self.sel)
+        mask = None
+        for condition, name, op, value in conditions:
+            # a mask may legitimately lack some of the request's dimensions
+            # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
+            # only the selectors whose dimension the mask variable has
+            sel = [s for s in self.sel or [] if s.split("=", 1)[0] in ds[name].dims]
+            try:
+                da = get_variable(ds, name, sel=sel)
+            except (KeyError, AssertionError, ValueError) as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} cannot "
+                    f"mask {self.variable!r} for this request"
+                ) from e
+            extra_dims = set(da.dims) - set(self.input.dims)
+            if extra_dims:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} has "
+                    f"dimensions {sorted(map(str, extra_dims))} that "
+                    f"{self.variable!r} does not"
+                )
+            # .where() aligns with join='inner': a mask on an offset or
+            # coarser grid would silently shrink (or empty) the data while
+            # bounds/transform, computed from the unmasked variable, go
+            # stale — reject coordinate mismatches instead
+            try:
+                xr.align(data, da, join="exact")
+            except ValueError as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} "
+                    f"coordinates do not match {self.variable!r}'s"
+                ) from e
+            # NaN compares False for every operator except != — without
+            # this a fill pixel in the flag variable passes `flag!=1`
+            # while failing the equivalent `flag==0`
+            comparison = _WHERE_OPS[op](da, value) & da.notnull()
+            mask = comparison if mask is None else mask & comparison
+        masked = data.where(mask)
+        # .where() drops encoding, and with it rio.nodata (read from
+        # encoding['_FillValue']) — carry it over so nodata behaves the
+        # same with and without a where= filter
+        masked.encoding = dict(data.encoding)
+        self.input = masked
 
     @classmethod
     def list_variables(

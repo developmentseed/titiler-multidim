@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!--
+  Time-animation gut check for a deployed titiler-multidim API.
+
+  Open this file in a browser (no build step), point it at a deployed API
+  and a store with a time dimension, and scrub or play through the
+  timestamps reported by /info?show_times=true. Every frame is rendered
+  live through /tiles, so this exercises the real read path — georeferencing,
+  time selection, rescale, and colormap — across the whole time axis.
+
+  The API must allow this page's origin via TITILER_MULTIDIM_CORS_ORIGINS.
+  Fields are prefilled for the TEMPO HCHO trial store and can be overridden
+  via query parameters: ?api=...&url=...&variable=...&rescale=...&colormap_name=...&where=...
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>titiler-multidim time animation</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    #controls { padding: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #ccc; }
+    #controls input[type=text] { padding: 4px; }
+    #api { width: 24em; } #url { width: 26em; } #variable { width: 12em; }
+    #rescale { width: 8em; } #colormap_name { width: 7em; }
+    #player { padding: 8px; display: flex; gap: 12px; align-items: center; border-top: 1px solid #ccc; }
+    #time-slider { flex: 1; }
+    #timestamp { font-variant-numeric: tabular-nums; min-width: 18em; }
+    #map { flex: 1; position: relative; }
+    #status { color: #b00; }
+    #spinner {
+      position: absolute; top: 12px; right: 12px; z-index: 1000;
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 4px solid #ccc; border-top-color: #16697a;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <input id="api" type="text" placeholder="API endpoint">
+    <input id="url" type="text" placeholder="store url">
+    <input id="variable" type="text" placeholder="variable">
+    <input id="rescale" type="text" placeholder="rescale">
+    <input id="colormap_name" type="text" placeholder="colormap">
+    <input id="where" type="text" placeholder="where, &amp;-separated (optional)">
+    <button id="load">Load</button>
+    <span id="status"></span>
+  </div>
+  <div id="map"><div id="spinner" hidden></div></div>
+  <div id="player" hidden>
+    <button id="play">&#9654;</button>
+    <input id="time-slider" type="range" min="0" value="0" step="1">
+    <label>opacity <input id="opacity" type="range" min="0" max="1" step="0.05" value="0.75"></label>
+    <span id="timestamp"></span>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const defaults = {
+      api: "",
+      url: "s3://airquality-data-store-develop/tempo/hcho/v04-trial",
+      variable: "vertical_column",
+      rescale: "0,1.5e16",
+      colormap_name: "viridis",
+      where: "",
+    };
+    for (const key of Object.keys(defaults)) $(key).value = params.has(key) ? params.get(key) : defaults[key];
+
+    const map = L.map("map").setView([40, -98], 4);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    }).addTo(map);
+
+    let times = [];
+    let dataLayers = [null, null]; // [current, previous] for double buffering
+    let playing = null;
+
+    function tileUrl(iso) {
+      const query = new URLSearchParams({
+        url: $("url").value,
+        variable: $("variable").value,
+        rescale: $("rescale").value,
+        colormap_name: $("colormap_name").value,
+        sel: `time=${iso}`,
+      });
+      // "a<=1&b<=0.5" or pasted "where=a<=1&where=b<=0.5" -> repeated
+      // where params, ANDed by the server
+      $("where").value.split("&")
+        .map((w) => w.trim().replace(/^where=/, "")).filter(Boolean)
+        .forEach((w) => query.append("where", w));
+      return `${$("api").value.replace(/\/+$/, "")}/tiles/WebMercatorQuad/{z}/{x}/{y}.png?${query}`;
+    }
+
+    function showTime(index) {
+      const iso = times[index];
+      $("timestamp").textContent = `${index + 1}/${times.length} — ${iso}`;
+      $("spinner").hidden = false;
+      const layer = L.tileLayer(tileUrl(iso), { opacity: +$("opacity").value, maxZoom: 12 });
+      // swap out the old frame only once the new one has its tiles, so
+      // playback doesn't flash the basemap between frames
+      layer.on("load", () => {
+        // a stale frame finishing late must not evict the newer frame
+        // (removing it aborts its tiles, so its own load never fires)
+        if (dataLayers[0] !== layer) return;
+        dataLayers.forEach((old) => old && old !== layer && map.removeLayer(old));
+        dataLayers = [layer, null];
+        $("status").textContent = "";
+        $("spinner").hidden = true;
+      });
+      // Leaflet drops failed tiles silently; surface the API's error instead
+      layer.on("tileerror", async (event) => {
+        $("spinner").hidden = true;
+        if ($("status").textContent) return;
+        $("status").textContent = "tile requests failing…";
+        try {
+          const r = await fetch(event.tile.src);
+          $("status").textContent = `tiles: HTTP ${r.status} ${(await r.text()).slice(0, 300)}`;
+        } catch (error) {
+          $("status").textContent = `tiles: ${error}`;
+        }
+      });
+      if (dataLayers[1]) map.removeLayer(dataLayers[1]); // scrubbing faster than tiles load
+      dataLayers[1] = dataLayers[0];
+      dataLayers[0] = layer;
+      layer.addTo(map);
+    }
+
+    $("load").onclick = async () => {
+      $("status").textContent = "loading /info…";
+      try {
+        const query = new URLSearchParams({
+          url: $("url").value,
+          variable: $("variable").value,
+          show_times: "true",
+        });
+        const info = await fetch(`${$("api").value.replace(/\/+$/, "")}/info?${query}`).then((r) => {
+          if (!r.ok) throw new Error(`/info ${r.status}`);
+          return r.json();
+        });
+        times = info.times || [];
+        if (!times.length) throw new Error("/info returned no times");
+        $("status").textContent = "";
+        $("player").hidden = false;
+        const slider = $("time-slider");
+        slider.max = times.length - 1;
+        slider.value = times.length - 1;
+        showTime(times.length - 1);
+      } catch (error) {
+        $("status").textContent = String(error);
+      }
+    };
+
+    $("time-slider").oninput = (event) => showTime(+event.target.value);
+    $("opacity").oninput = (event) => dataLayers.forEach((l) => l && l.setOpacity(+event.target.value));
+    $("play").onclick = () => {
+      if (playing) {
+        clearInterval(playing);
+        playing = null;
+        $("play").innerHTML = "&#9654;";
+        return;
+      }
+      $("play").innerHTML = "&#9646;&#9646;";
+      playing = setInterval(() => {
+        const slider = $("time-slider");
+        slider.value = (+slider.value + 1) % times.length;
+        showTime(+slider.value);
+      }, 1200);
+    };
+  </script>
+</body>
+</html>
