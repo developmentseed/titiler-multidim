@@ -98,6 +98,7 @@ def test_granule_time_matches():
 
 
 def test_check_unpacked_refuses_scaled_variables():
+    """A CF-packed variable must abort the run."""
     with h5py.File(io.BytesIO(), "w") as h5:
         ds = h5.create_dataset("v", data=np.zeros(2, dtype="int16"))
         ds.attrs["scale_factor"] = np.float32(0.5)
@@ -106,5 +107,6 @@ def test_check_unpacked_refuses_scaled_variables():
 
 
 def test_check_unpacked_accepts_plain_variables():
+    """An unpacked variable passes the guard."""
     with h5py.File(io.BytesIO(), "w") as h5:
         cpv.check_unpacked(h5.create_dataset("v", data=np.zeros(2, "float32")), "v")

@@ -274,7 +274,7 @@ class XarrayReader(Reader):
             time.monotonic() - started_at,
         )
 
-    def _apply_where(self) -> None:
+    def _apply_where(self) -> None:  # noqa: C901
         """Mask the selected variable by the `where` conditions.
 
         Each condition is `{variable}{op}{number}` against another variable
