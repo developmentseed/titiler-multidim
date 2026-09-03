@@ -75,6 +75,17 @@ def test_source_dataset_finds_root_and_grouped_names():
     assert cpv.source_dataset(h5, "missing") is None
 
 
+def test_pick_pixels_nan_fill_is_classified_as_fill():
+    """NaN != NaN is True, so a NaN _FillValue must not make every fill
+    pixel look valid."""
+    window = np.full((10, 10), np.nan)
+    window[0, 0] = 1.5
+    picks = cpv.pick_pixels(window, np.nan, np.random.default_rng(0), 4)
+    valid = [(r, c, v) for r, c, v in picks if not np.isnan(v)]
+    assert valid == [(0, 0, 1.5)]
+    assert any(np.isnan(v) for _, _, v in picks)  # the one fill pick
+
+
 def test_granule_time_matches():
     """Raw axis seconds match the ISO timestamp within one second."""
     units = "seconds since 1980-01-06T00:00:00Z"

@@ -53,7 +53,12 @@ def pick_pixels(
     the fill pixel — the value a CF-decoding reader should hand back.
     """
     window = np.asarray(window)
-    valid_mask = np.ones(window.shape, bool) if fill is None else window != fill
+    valid_mask = (
+        np.ones(window.shape, bool)
+        if fill is None
+        # NaN != NaN is True — a NaN _FillValue must land in the fill branch
+        else (window != fill) & ~np.isnan(window)
+    )
     picks = []
     valid = np.argwhere(valid_mask)
     if len(valid):
