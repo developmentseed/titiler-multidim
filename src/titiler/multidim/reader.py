@@ -242,6 +242,12 @@ _WHERE_OPS: Dict[str, Any] = {
     ">=": operator.ge,
 }
 
+# Chunk size for where-involved variables with no on-disk chunking
+# (contiguous NetCDF): dask "auto" would make one whole-variable chunk,
+# turning every windowed read into a full read.
+# ponytail: fixed 1024 fallback; make it a setting if a store needs tuning
+_FALLBACK_CHUNK = 1024
+
 
 @attr.s
 class XarrayReader(Reader):
@@ -307,8 +313,12 @@ class XarrayReader(Reader):
         for name in {self.variable, *(name for _, name, _, _ in conditions)}:
             da = ds[name]
             if da.chunks is None:
-                preferred = da.encoding.get("preferred_chunks") or {}
-                ds[name] = da.chunk({d: preferred.get(d, "auto") for d in da.dims})
+                preferred = da.encoding.get("preferred_chunks") or dict(
+                    zip(da.dims, da.encoding.get("chunksizes") or ())
+                )
+                ds[name] = da.chunk(
+                    {d: preferred.get(d, _FALLBACK_CHUNK) for d in da.dims}
+                )
 
         data = get_variable(ds, self.variable, sel=self.sel)
         mask = None

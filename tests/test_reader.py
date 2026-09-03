@@ -251,3 +251,24 @@ class TestApplyWhere:
         with self._reader(store, where=["flag!=1"]) as src:
             # [0, 0] is lat=-85, lon=-175, where flag is NaN (fill)
             assert src.point(-175.0, -85.0).array[0] is np.ma.masked
+
+    def test_contiguous_netcdf_gets_bounded_chunks(self, tmp_path):
+        """A contiguous variable has no preferred_chunks; the fallback must
+        not become one whole-variable dask chunk (dask 'auto' would)."""
+        rng = np.random.default_rng(7)
+        ds = xr.Dataset(
+            {
+                "data": (("lat", "lon"), rng.random((2000, 8))),
+                "mask2d": (("lat", "lon"), np.ones((2000, 8))),
+            },
+            coords={
+                "lat": np.linspace(-85.0, 85.0, 2000),
+                "lon": np.linspace(-175.0, 175.0, 8),
+            },
+        )
+        path = str(tmp_path / "contiguous.nc")
+        ds.to_netcdf(path, engine="h5netcdf")
+        with reader.XarrayReader(
+            src_path=path, variable="data", decode_times=False, where=["mask2d>=0"]
+        ) as src:
+            assert max(src.input.chunksizes["y"]) <= reader._FALLBACK_CHUNK
