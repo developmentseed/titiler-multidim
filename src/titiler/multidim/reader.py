@@ -309,6 +309,7 @@ class XarrayReader(Reader):
                 preferred = da.encoding.get("preferred_chunks") or {}
                 ds[name] = da.chunk({d: preferred.get(d, "auto") for d in da.dims})
 
+        data = get_variable(ds, self.variable, sel=self.sel)
         mask = None
         for condition, name, op, value in conditions:
             # a mask may legitimately lack some of the request's dimensions
@@ -329,9 +330,20 @@ class XarrayReader(Reader):
                     f"dimensions {sorted(map(str, extra_dims))} that "
                     f"{self.variable!r} does not"
                 )
+            # .where() aligns with join='inner': a mask on an offset or
+            # coarser grid would silently shrink (or empty) the data while
+            # bounds/transform, computed from the unmasked variable, go
+            # stale — reject coordinate mismatches instead
+            try:
+                xr.align(data, da, join="exact")
+            except ValueError as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition!r}: {name!r} "
+                    f"coordinates do not match {self.variable!r}'s"
+                ) from e
             comparison = _WHERE_OPS[op](da, value)
             mask = comparison if mask is None else mask & comparison
-        self.input = get_variable(ds, self.variable, sel=self.sel).where(mask)
+        self.input = data.where(mask)
 
     @classmethod
     def list_variables(

@@ -145,8 +145,18 @@ class TestApplyWhere:
                 "data": (("time", "lat", "lon"), rng.random((4, 18, 36))),
                 "mask2d": (("lat", "lon"), rng.random((18, 36))),
                 "line": (("time",), np.arange(4.0)),
+                # same grid shape, offset by 0.1 deg: get_variable renames
+                # latitude/longitude to y/x too, so only coordinate values
+                # distinguish it from the data's grid
+                "offgrid": (("latitude", "longitude"), rng.random((18, 36))),
             },
-            coords={"time": np.arange(4), "lat": lat, "lon": lon},
+            coords={
+                "time": np.arange(4),
+                "lat": lat,
+                "lon": lon,
+                "latitude": lat + 0.1,
+                "longitude": lon + 0.1,
+            },
         )
         path = str(tmp_path_factory.mktemp("where") / "store.zarr")
         ds.chunk({"time": 1, "lat": 9, "lon": 9}).to_zarr(path, consolidated=False)
@@ -195,3 +205,12 @@ class TestApplyWhere:
         """Masking must not materialize the full slice at reader construction."""
         with self._reader(store, where=["mask2d>=0.5"]) as src:
             assert not src.input._in_memory
+
+    def test_mask_on_mismatched_grid_is_a_400(self, store):
+        """A mask whose coordinates differ from the data's must 400 —
+        .where() would align with join='inner' and silently shrink or
+        empty the data while bounds/transform go stale."""
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="offgrid"):
+            self._reader(store, where=["offgrid>=0"])
