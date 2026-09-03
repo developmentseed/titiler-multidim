@@ -27,8 +27,15 @@
     #player { padding: 8px; display: flex; gap: 12px; align-items: center; border-top: 1px solid #ccc; }
     #time-slider { flex: 1; }
     #timestamp { font-variant-numeric: tabular-nums; min-width: 18em; }
-    #map { flex: 1; }
+    #map { flex: 1; position: relative; }
     #status { color: #b00; }
+    #spinner {
+      position: absolute; top: 12px; right: 12px; z-index: 1000;
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 4px solid #ccc; border-top-color: #16697a;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -42,7 +49,7 @@
     <button id="load">Load</button>
     <span id="status"></span>
   </div>
-  <div id="map"></div>
+  <div id="map"><div id="spinner" hidden></div></div>
   <div id="player" hidden>
     <button id="play">&#9654;</button>
     <input id="time-slider" type="range" min="0" value="0" step="1">
@@ -61,7 +68,7 @@
       colormap_name: "viridis",
       where: "",
     };
-    for (const key of Object.keys(defaults)) $(key).value = params.get(key) || defaults[key];
+    for (const key of Object.keys(defaults)) $(key).value = params.has(key) ? params.get(key) : defaults[key];
 
     const map = L.map("map").setView([40, -98], 4);
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
@@ -91,16 +98,22 @@
     function showTime(index) {
       const iso = times[index];
       $("timestamp").textContent = `${index + 1}/${times.length} — ${iso}`;
+      $("spinner").hidden = false;
       const layer = L.tileLayer(tileUrl(iso), { opacity: +$("opacity").value, maxZoom: 12 });
       // swap out the old frame only once the new one has its tiles, so
       // playback doesn't flash the basemap between frames
       layer.on("load", () => {
+        // a stale frame finishing late must not evict the newer frame
+        // (removing it aborts its tiles, so its own load never fires)
+        if (dataLayers[0] !== layer) return;
         dataLayers.forEach((old) => old && old !== layer && map.removeLayer(old));
         dataLayers = [layer, null];
         $("status").textContent = "";
+        $("spinner").hidden = true;
       });
       // Leaflet drops failed tiles silently; surface the API's error instead
       layer.on("tileerror", async (event) => {
+        $("spinner").hidden = true;
         if ($("status").textContent) return;
         $("status").textContent = "tile requests failing…";
         try {
