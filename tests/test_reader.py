@@ -214,3 +214,28 @@ class TestApplyWhere:
 
         with pytest.raises(BadRequestError, match="offgrid"):
             self._reader(store, where=["offgrid>=0"])
+
+    def test_where_preserves_encoding(self, store):
+        """.where() returns a bare array; losing encoding would turn
+        rio.nodata (from encoding['_FillValue']) into None whenever a
+        where= filter is present."""
+        def encodings_equal(enc1, enc2):
+            """Compare encodings, treating NaN values as equal."""
+            if enc1.keys() != enc2.keys():
+                return False
+            for key in enc1.keys():
+                v1, v2 = enc1[key], enc2[key]
+                # Handle NaN values specially (NaN != NaN in Python)
+                if isinstance(v1, float) and isinstance(v2, float):
+                    if np.isnan(v1) and np.isnan(v2):
+                        continue
+                if v1 != v2:
+                    return False
+            return True
+
+        with (
+            self._reader(store) as plain,
+            self._reader(store, where=["mask2d>=0"]) as masked,
+        ):
+            assert plain.input.encoding  # fixture must actually carry encoding
+            assert encodings_equal(masked.input.encoding, plain.input.encoding)

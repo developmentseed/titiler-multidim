@@ -277,7 +277,8 @@ class XarrayReader(Reader):
         and the data describe the same slice. Conditions are ANDed; failing
         pixels become NaN and follow the normal nodata path. The involved
         variables are dask-chunked by their on-disk chunking, so masking
-        stays lazy until the windowed read.
+        stays lazy until the windowed read. Masked pixels become NaN, so
+        integer variables are upcast to float by .where().
         """
         if not self.where:
             return
@@ -343,7 +344,12 @@ class XarrayReader(Reader):
                 ) from e
             comparison = _WHERE_OPS[op](da, value)
             mask = comparison if mask is None else mask & comparison
-        self.input = data.where(mask)
+        masked = data.where(mask)
+        # .where() drops encoding, and with it rio.nodata (read from
+        # encoding['_FillValue']) — carry it over so nodata behaves the
+        # same with and without a where= filter
+        masked.encoding = dict(data.encoding)
+        self.input = masked
 
     @classmethod
     def list_variables(
