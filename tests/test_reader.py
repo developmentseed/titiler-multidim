@@ -224,6 +224,7 @@ class TestApplyWhere:
         """.where() returns a bare array; losing encoding would turn
         rio.nodata (from encoding['_FillValue']) into None whenever a
         where= filter is present."""
+
         def encodings_equal(enc1, enc2):
             """Compare encodings, treating NaN values as equal."""
             if enc1.keys() != enc2.keys():

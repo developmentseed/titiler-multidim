@@ -267,11 +267,7 @@ def earthdata_endpoints(
     declared = {_add_trailing(p) for p in declared_prefixes}
     endpoints = set()
     for prefix, entry in entries.items():
-        if (
-            isinstance(entry, S3ChunkAccess)
-            and entry.earthdata
-            and prefix in declared
-        ):
+        if isinstance(entry, S3ChunkAccess) and entry.earthdata and prefix in declared:
             from earthaccess_auth.daac import resolve_bucket
 
             info = resolve_bucket(prefix)
