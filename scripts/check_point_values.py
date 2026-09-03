@@ -109,6 +109,12 @@ def granule_time_matches(
     return abs((decoded - expected).total_seconds()) <= tolerance
 
 
+# nearest_granule and source_dataset are deliberate copies of
+# tempo-virtual-zarr-pipeline's verify_store.py helpers (a cross-repo
+# import is not feasible for a standalone script). This copy caps CMR at
+# page_size=10 instead of paginating — fine for a +/-2h search window.
+
+
 def nearest_granule(collection: str, when: datetime) -> str | None:
     """Ask CMR for the direct-access URL of the granule nearest ``when``."""
 
@@ -145,22 +151,14 @@ def nearest_granule(collection: str, when: datetime) -> str | None:
 def open_granule(url: str) -> Iterator[h5py.File]:
     """Open an s3:// granule with h5py over buffered obstore reads."""
     import obstore
-    from earthaccess_auth.adapters.obstore import (
-        EarthdataS3CredentialProvider,
-        resolve_bucket,
-    )
+    from earthaccess_auth.adapters.obstore import EarthdataS3CredentialProvider
     from obstore.store import S3Store
 
     bucket, key = url.removeprefix("s3://").split("/", 1)
-    info = resolve_bucket(bucket)
-    if info is None:
-        raise SystemExit(f"bucket {bucket!r} is not a known DAAC bucket")
+    # raises S3CredentialsEndpointUnresolved for buckets outside the registry
+    provider = EarthdataS3CredentialProvider.for_bucket(bucket)
     store = S3Store(
-        bucket,
-        region=info.region,
-        credential_provider=EarthdataS3CredentialProvider(
-            info.endpoint, region=info.region
-        ),
+        bucket, region=provider.config["region"], credential_provider=provider
     )
     with h5py.File(obstore.open_reader(store, key, buffer_size=8 * 1024**2)) as h5:
         yield h5
