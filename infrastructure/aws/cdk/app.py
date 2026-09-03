@@ -173,14 +173,6 @@ class LambdaStack(Stack):
 
 app = App()
 
-
-lambda_stack = LambdaStack(
-    app,
-    f"{stack_settings.titiler_multidim_stack_name}-{stack_settings.stage}",
-    memory=10240,
-    timeout=app_settings.timeout,
-    concurrent=app_settings.max_concurrent,
-    environment=app_settings.additional_env,
 lambda_stack = LambdaStack(
     app,
     f"{stack_settings.titiler_multidim_stack_name}-{stack_settings.stage}",
