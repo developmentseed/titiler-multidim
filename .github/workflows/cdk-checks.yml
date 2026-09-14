@@ -60,6 +60,7 @@ jobs:
       TITILER_MULTIDIM_DEBUG: true
       # dummy value; synth only parses it
       TITILER_MULTIDIM_READER_ROLE_ARN: arn:aws:iam::123456789012:role/ci-dummy-reader
+      PERMISSIONS_BOUNDARY_POLICY_NAME: ci-dummy-boundary
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
