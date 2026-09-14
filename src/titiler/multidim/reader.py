@@ -258,12 +258,7 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
-_WHERE_CONDITION = re.compile(
-    r"^\s*(?P<variable>[\w.-]+)\s*(?P<op>==|!=|<=|>=|<|>)\s*"
-    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
-)
-
-_WHERE_OPS: Dict[str, Any] = {
+_WHERE_OPS: Dict[str, Callable[[xr.DataArray, float], xr.DataArray]] = {
     "==": operator.eq,
     "!=": operator.ne,
     "<": operator.lt,
@@ -272,18 +267,26 @@ _WHERE_OPS: Dict[str, Any] = {
     ">=": operator.ge,
 }
 
+# Use re.escape as a safety mechanism, in case an op string happens to contain
+# any re metacharacter.
+_WHERE_CONDITION = re.compile(
+    r"^\s*(?P<variable>[\w.-]+)\s*"
+    rf"(?P<op>{'|'.join(map(re.escape, _WHERE_OPS))})\s*"
+    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+)
+
 # Chunk size for where-involved variables with no on-disk chunking
 # (contiguous NetCDF): dask "auto" would make one whole-variable chunk,
 # turning every windowed read into a full read.
 # ponytail: fixed 1024 fallback; make it a setting if a store needs tuning
-_FALLBACK_CHUNK = 1024
+_FALLBACK_CHUNK_SIZE = 1024
 
 
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with Icechunk and virtual chunk support."""
 
-    where: Optional[List[str]] = attr.ib(default=None, kw_only=True)
+    where: List[str] = attr.ib(factory=list, kw_only=True)
 
     def __attrs_post_init__(self):
         """Configure the custom opener before the parent reads the dataset."""
