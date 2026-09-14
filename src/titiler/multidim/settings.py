@@ -57,6 +57,10 @@ class StackSettings(BaseSettings):
     veda_custom_host: str | None = Field(
         None, description="Custom host URL override for API Gateway integration"
     )
+    permissions_boundary_policy_name: str | None = Field(
+        None,
+        description="Name of the IAM policy to define stack permissions boundary",
+    )
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
