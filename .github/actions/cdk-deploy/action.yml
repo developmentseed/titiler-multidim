@@ -22,11 +22,11 @@ runs:
   using: "composite"
   steps:
     - name: Install node and related deps
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: 22
 
-    - uses: actions/cache@v3
+    - uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
       with:
         path: ~/.npm
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{
@@ -50,11 +50,13 @@ runs:
       working-directory: ${{ inputs.dir }}
       env:
         AWS_DEFAULT_REGION: us-west-2
+        INPUTS_SCRIPT_PATH: ${{ inputs.script_path }}
+        INPUTS_ENV_AWS_SECRET_NAME: ${{ inputs.env_aws_secret_name }}
       run: |
-        if [[ -z "${{ inputs.script_path }}" ]]; then
-        ./scripts/sync-env.sh ${{ inputs.env_aws_secret_name }}
+        if [[ -z "${INPUTS_SCRIPT_PATH}" ]]; then
+        ./scripts/sync-env.sh ${INPUTS_ENV_AWS_SECRET_NAME}
         else
-        python ${{ inputs.script_path }} --secret-id ${{ inputs.env_aws_secret_name }}
+        python ${INPUTS_SCRIPT_PATH} --secret-id ${INPUTS_ENV_AWS_SECRET_NAME}
         fi
 
     - name: CDK Synth
