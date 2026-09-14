@@ -30,6 +30,7 @@ dependencies = [
     "boto3>=1.39.0",
     "earthaccess-auth>=0.3.1",
     "cftime",
+    "dask[array]>=2026.3.0",
     "fastapi",
     "fsspec",
     "h5netcdf",
@@ -65,7 +66,6 @@ lambda = [
 
 [dependency-groups]
 dev = [
-    "dask>=2026.3.0",
     "httpx2",
     "ipykernel>=7.2.0",
     "ipython>=9.13.0",

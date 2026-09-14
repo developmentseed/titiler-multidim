@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import logging
+import operator
 import os
+import re
 import time
+from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     Dict,
+    Iterable,
     List,
     Optional,
+    Sequence,
 )
 from urllib.parse import urlparse
 
@@ -17,9 +23,11 @@ import attr
 import icechunk
 import obstore
 import xarray as xr
+import zarr
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from titiler.xarray.io import Reader, xarray_open_dataset
+from titiler.core.errors import BadRequestError
+from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
     ChunkAccessMapping,
@@ -106,7 +114,7 @@ def opener_icechunk(
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
     started_at = time.monotonic()
     dataset = xr.open_dataset(
-        store,
+        store,  # type: ignore[arg-type]  # the zarr engine accepts stores; xarray's hints don't
         group=group,
         decode_times=decode_times,
         engine="zarr",
@@ -119,6 +127,33 @@ def opener_icechunk(
         time.monotonic() - started_at,
     )
     return dataset
+
+
+def opener_zarr(
+    src_path: str,
+    group: Optional[str] = None,
+    decode_times: bool = True,
+    **kwargs: Any,
+) -> xr.Dataset:
+    """Open a Zarr store with xarray's lazy (unchunked) arrays.
+
+    Mirrors titiler.xarray's fs_open_dataset zarr branch but pins
+    chunks=None: with dask installed, open_zarr otherwise defaults to
+    dask-backed variables, taxing every request with graph overhead
+    (~+10 ms warm tile measured) when only `where=` needs a chunk
+    manager (see `chunk_for_lazy_ops`).
+    """
+    store = zarr.storage.FsspecStore.from_url(
+        src_path, storage_options={"asynchronous": True, **kwargs}
+    )
+    xr_open_args: Dict[str, Any] = {
+        "decode_coords": "all",
+        "decode_times": decode_times,
+        "chunks": None,
+    }
+    if group is not None:
+        xr_open_args["group"] = group
+    return xr.open_zarr(store, **xr_open_args)
 
 
 # TODO Is there a better way to check if a url points to a file or a prefix?
@@ -140,6 +175,7 @@ def identify_storage_backend(src_path: str) -> str:
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
 
+    store: obstore.store.LocalStore | obstore.store.S3Store
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
@@ -205,7 +241,9 @@ def guess_opener(
             decode_times=decode_times,
             authorize_virtual_chunk_access=authorize_virtual_chunk_access,
         )
-    # For zarr, h5netcdf, or other formats, use the standard xarray opener
+    if storage_format == "zarr":
+        return opener_zarr(src_path, group=group, decode_times=decode_times, **kwargs)
+    # For h5netcdf or other formats, use the standard xarray opener
     return xarray_open_dataset(
         src_path, group=group, decode_times=decode_times, **kwargs
     )
@@ -224,23 +262,196 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
+_WHERE_PREDICATE_BY_OP: Dict[str, Callable[[xr.DataArray, float], xr.DataArray]] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+}
+
+# Use re.escape as a safety mechanism, in case an op string happens to contain
+# any re metacharacter.
+_WHERE_CONDITION_RE = re.compile(
+    r"^\s*(?P<variable>[\w.-]+)\s*"
+    rf"(?P<op>{'|'.join(map(re.escape, _WHERE_PREDICATE_BY_OP))})\s*"
+    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+)
+
+# Chunk size for where-involved variables with no on-disk chunking
+# (contiguous NetCDF): dask "auto" would make one whole-variable chunk,
+# turning every windowed read into a full read.
+# ponytail: fixed 1024 fallback; make it a setting if a store needs tuning
+_FALLBACK_CHUNK_SIZE = 1024
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WhereCondition:
+    """One parsed `{variable}{op}{number}` masking condition."""
+
+    raw: str  # the original string, for error messages
+    variable: str
+    op: str
+    value: float
+
+
+def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
+    """Parse `where=` condition strings. Syntax only: no dataset needed."""
+    parsed = []
+    invalid = []
+    for condition in conditions:
+        if match := _WHERE_CONDITION_RE.match(condition):
+            parsed.append(
+                WhereCondition(
+                    raw=condition,
+                    variable=match["variable"],
+                    op=match["op"],
+                    value=float(match["value"]),
+                )
+            )
+        else:
+            invalid.append(condition)
+    if invalid:
+        raise BadRequestError(
+            f"Invalid where condition {', '.join(map(repr, invalid))}: expected "
+            "`{variable}{op}{number}` with op one of "
+            f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
+        )
+    return parsed
+
+
+def chunk_for_lazy_ops(ds: xr.Dataset, names: Iterable[str]) -> xr.Dataset:
+    """Dask-back `names` by their on-disk chunking.
+
+    Xarray's lazy-indexing layer defers indexing only: any elementwise op
+    on an unchunked variable materializes the whole array. The openers
+    therefore yield unchunked arrays (cheapest for the plain read path —
+    see `opener_zarr`) and this turns dask on for exactly the variables
+    an operation touches.
+
+    Mutates `ds` in place because `Dataset.copy()` silently drops the
+    closer the opener set, so a copy assigned back to a reader would make
+    `close()` a no-op and leak the underlying store. Safe while opener
+    results are per-request; a shared opened-dataset cache would be
+    poisoned by this per-request chunking.
+    """
+    for name in names:
+        if (da := ds[name]).chunks is None:
+            preferred = da.encoding.get("preferred_chunks") or dict(
+                zip(da.dims, da.encoding.get("chunksizes") or ())
+            )
+            ds[name] = da.chunk(
+                {d: preferred.get(d, _FALLBACK_CHUNK_SIZE) for d in da.dims},
+                chunked_array_type="dask",
+            )
+    return ds
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with Icechunk and virtual chunk support."""
+
+    where: List[str] = attr.ib(factory=list, kw_only=True)
 
     def __attrs_post_init__(self):
         """Configure the custom opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
         self.opener = guess_opener
+        # parse before opening: a where= syntax error 400s without any I/O
+        conditions = parse_where(self.where)
         log_path = _log_path(self.src_path)
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
-        super().__attrs_post_init__()
+        try:
+            super().__attrs_post_init__()
+            self._apply_where(conditions)
+        except Exception:
+            # super() can raise after opening (bad variable/sel, missing
+            # spatial metadata), so close the dataset if it got that far
+            if (ds := getattr(self, "ds", None)) is not None:
+                ds.close()
+            raise
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
             log_path,
             time.monotonic() - started_at,
         )
+
+    def _apply_where(self, conditions: Sequence[WhereCondition]) -> None:
+        """Mask the selected variable by the `where` conditions.
+
+        Each condition compares another variable of the same dataset,
+        extracted with the request's `sel` selectors (restricted to the
+        dimensions each mask variable has) so the mask and the data
+        describe the same slice. Conditions are ANDed; failing pixels
+        become NaN and follow the normal nodata path. Masked pixels
+        become NaN, so integer variables are upcast to float by .where().
+        """
+        if not conditions:
+            return
+        if missing := sorted(
+            {c.variable for c in conditions if c.variable not in self.ds}
+        ):
+            raise BadRequestError(
+                f"Invalid where condition: variable {', '.join(map(repr, missing))} "
+                "not found in the dataset"
+            )
+
+        # Chunk the involved variables so the comparisons and the mask
+        # defer all reads to the windowed read path instead of
+        # materializing the full slice here on every request,
+        # /tilejson.json and /info included. self.input was extracted from
+        # the unchunked variables, so re-extract from the chunked ones.
+        ds = chunk_for_lazy_ops(
+            self.ds, {self.variable, *(c.variable for c in conditions)}
+        )
+        data = get_variable(ds, self.variable, sel=self.sel)
+        mask = None
+        for condition in conditions:
+            name = condition.variable
+            # a mask may legitimately lack some of the request's dimensions
+            # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
+            # only the selectors whose dimension the mask variable has
+            sel = [s for s in self.sel or [] if s.split("=", 1)[0] in ds[name].dims]
+            try:
+                da = get_variable(ds, name, sel=sel)
+            except (KeyError, AssertionError, ValueError) as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} cannot "
+                    f"mask {self.variable!r} for this request"
+                ) from e
+            extra_dims = set(da.dims) - set(self.input.dims)
+            if extra_dims:
+                raise BadRequestError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} has "
+                    f"dimensions {sorted(map(str, extra_dims))} that "
+                    f"{self.variable!r} does not"
+                )
+            # .where() aligns with join='inner': a mask on an offset or
+            # coarser grid would silently shrink (or empty) the data while
+            # bounds/transform, computed from the unmasked variable, go
+            # stale — reject coordinate mismatches instead
+            try:
+                xr.align(data, da, join="exact")
+            except ValueError as e:
+                raise BadRequestError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} "
+                    f"coordinates do not match {self.variable!r}'s"
+                ) from e
+            # NaN compares False for every operator except != — without
+            # this a fill pixel in the flag variable passes `flag!=1`
+            # while failing the equivalent `flag==0`
+            comparison = (
+                _WHERE_PREDICATE_BY_OP[condition.op](da, condition.value) & da.notnull()
+            )
+            mask = comparison if mask is None else mask & comparison
+        masked = data.where(mask)
+        # .where() drops encoding, and with it rio.nodata (read from
+        # encoding['_FillValue']) — carry it over so nodata behaves the
+        # same with and without a where= filter
+        masked.encoding = dict(data.encoding)
+        self.input = masked
 
     @classmethod
     def list_variables(

@@ -1,6 +1,7 @@
 """TiTiler Xarray mosaic factory."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
 
@@ -38,6 +39,25 @@ from titiler.multidim.mosaic import XarrayMosaicBackend
 from titiler.multidim.reader import XarrayReader
 
 
+@dataclass
+class MultidimXarrayParams(XarrayParams):
+    """XarrayParams plus cross-variable masking."""
+
+    where: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "Mask the selected variable by numeric conditions on other "
+                "variables of the same dataset, `{variable}{op}{number}` "
+                "with op one of ==, !=, <, <=, >, >= "
+                "(e.g. `where=main_data_quality_flag==0`). Repeat the "
+                "parameter to AND conditions. Pixels failing any condition "
+                "render as nodata."
+            ),
+        ),
+    ] = None
+
+
 def DatasetPathParams(
     url: list[str] = Query(
         min_length=1,
@@ -56,7 +76,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
     backend: type[XarrayMosaicBackend] = XarrayMosaicBackend
     dataset_reader: type[XarrayReader] = XarrayReader
     path_dependency: Callable[..., list[str]] = DatasetPathParams
-    reader_dependency: type[DefaultDependency] = XarrayParams
+    reader_dependency: type[DefaultDependency] = MultidimXarrayParams
     layer_dependency: type[DefaultDependency] = BidxParams
     dataset_dependency: type[DefaultDependency] = DatasetParams
     img_part_dependency: type[DefaultDependency] = PartFeatureParams
