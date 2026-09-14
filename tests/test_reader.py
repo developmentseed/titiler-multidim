@@ -1,5 +1,7 @@
 """Reader tests."""
 
+from unittest import mock
+
 import icechunk
 import numpy as np
 import obstore
@@ -215,8 +217,22 @@ class TestApplyWhere:
 
         monkeypatch.setattr(reader, "guess_opener", spy_opener)
         with pytest.raises(BadRequestError):
-            self._reader(store, where=["data=1"])
+            self._reader(store, where=["nope==1"])
         assert closed == [True]
+
+    def test_invalid_syntax_is_a_400_before_the_store_is_opened(
+        self, store, monkeypatch
+    ):
+        """A malformed condition must 400 without any I/O."""
+        from titiler.core.errors import BadRequestError
+
+        opener = mock.Mock(wraps=reader.guess_opener)
+        monkeypatch.setattr(reader, "guess_opener", opener)
+
+        with pytest.raises(BadRequestError, match="expected"):
+            self._reader(store, where=["data=1"])
+
+        opener.assert_not_called()
 
     def test_where_masking_stays_lazy(self, store):
         """Masking must not materialize the full slice at reader construction."""

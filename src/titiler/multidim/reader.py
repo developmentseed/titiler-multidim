@@ -7,12 +7,15 @@ import operator
 import os
 import re
 import time
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
     List,
     Optional,
+    Sequence,
 )
 from urllib.parse import urlparse
 
@@ -138,7 +141,7 @@ def opener_zarr(
     chunks=None: with dask installed, open_zarr otherwise defaults to
     dask-backed variables, taxing every request with graph overhead
     (~+10 ms warm tile measured) when only `where=` needs a chunk
-    manager — and _apply_where chunks its own variables.
+    manager (see `chunk_for_lazy_ops`).
     """
     store = zarr.storage.FsspecStore.from_url(
         src_path, storage_options={"asynchronous": True, **kwargs}
@@ -283,6 +286,68 @@ _WHERE_CONDITION_RE = re.compile(
 _FALLBACK_CHUNK_SIZE = 1024
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WhereCondition:
+    """One parsed `{variable}{op}{number}` masking condition."""
+
+    raw: str  # the original string, for error messages
+    variable: str
+    op: str
+    value: float
+
+
+def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
+    """Parse `where=` condition strings. Syntax only: no dataset needed."""
+    parsed = []
+    invalid = []
+    for condition in conditions:
+        if match := _WHERE_CONDITION_RE.match(condition):
+            parsed.append(
+                WhereCondition(
+                    raw=condition,
+                    variable=match["variable"],
+                    op=match["op"],
+                    value=float(match["value"]),
+                )
+            )
+        else:
+            invalid.append(condition)
+    if invalid:
+        raise BadRequestError(
+            f"Invalid where condition {', '.join(map(repr, invalid))}: expected "
+            "`{variable}{op}{number}` with op one of "
+            f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
+        )
+    return parsed
+
+
+def chunk_for_lazy_ops(ds: xr.Dataset, names: Iterable[str]) -> xr.Dataset:
+    """Dask-back `names` by their on-disk chunking.
+
+    Xarray's lazy-indexing layer defers indexing only: any elementwise op
+    on an unchunked variable materializes the whole array. The openers
+    therefore yield unchunked arrays (cheapest for the plain read path —
+    see `opener_zarr`) and this turns dask on for exactly the variables
+    an operation touches.
+
+    Mutates `ds` in place because `Dataset.copy()` silently drops the
+    closer the opener set, so a copy assigned back to a reader would make
+    `close()` a no-op and leak the underlying store. Safe while opener
+    results are per-request; a shared opened-dataset cache would be
+    poisoned by this per-request chunking.
+    """
+    for name in names:
+        if (da := ds[name]).chunks is None:
+            preferred = da.encoding.get("preferred_chunks") or dict(
+                zip(da.dims, da.encoding.get("chunksizes") or ())
+            )
+            ds[name] = da.chunk(
+                {d: preferred.get(d, _FALLBACK_CHUNK_SIZE) for d in da.dims},
+                chunked_array_type="dask",
+            )
+    return ds
+
+
 @attr.s
 class XarrayReader(Reader):
     """Custom XarrayReader with Icechunk and virtual chunk support."""
@@ -293,14 +358,19 @@ class XarrayReader(Reader):
         """Configure the custom opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
         self.opener = guess_opener
+        # parse before opening: a where= syntax error 400s without any I/O
+        conditions = parse_where(self.where)
         log_path = _log_path(self.src_path)
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
-        super().__attrs_post_init__()
         try:
-            self._apply_where()
+            super().__attrs_post_init__()
+            self._apply_where(conditions)
         except Exception:
-            self.ds.close()
+            # super() can raise after opening (bad variable/sel, missing
+            # spatial metadata), so close the dataset if it got that far
+            if (ds := getattr(self, "ds", None)) is not None:
+                ds.close()
             raise
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
@@ -308,56 +378,38 @@ class XarrayReader(Reader):
             time.monotonic() - started_at,
         )
 
-    def _apply_where(self) -> None:  # noqa: C901
+    def _apply_where(self, conditions: Sequence[WhereCondition]) -> None:
         """Mask the selected variable by the `where` conditions.
 
-        Each condition is `{variable}{op}{number}` against another variable
-        of the same dataset, extracted with the request's `sel` selectors
-        (restricted to the dimensions each mask variable has) so the mask
-        and the data describe the same slice. Conditions are ANDed; failing
-        pixels become NaN and follow the normal nodata path. The involved
-        variables are dask-chunked by their on-disk chunking, so masking
-        stays lazy until the windowed read. Masked pixels become NaN, so
-        integer variables are upcast to float by .where().
+        Each condition compares another variable of the same dataset,
+        extracted with the request's `sel` selectors (restricted to the
+        dimensions each mask variable has) so the mask and the data
+        describe the same slice. Conditions are ANDed; failing pixels
+        become NaN and follow the normal nodata path. Masked pixels
+        become NaN, so integer variables are upcast to float by .where().
         """
-        if not self.where:
+        if not conditions:
             return
-        conditions = []
-        for condition in self.where:
-            parsed = _WHERE_CONDITION_RE.match(condition)
-            if not parsed:
-                raise BadRequestError(
-                    f"Invalid where condition {condition!r}: expected "
-                    "`{variable}{op}{number}` with op one of "
-                    f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
-                )
-            name = parsed["variable"]
-            if name not in self.ds:
-                raise BadRequestError(
-                    f"Invalid where condition {condition!r}: variable "
-                    f"{name!r} not found in the dataset"
-                )
-            conditions.append((condition, name, parsed["op"], float(parsed["value"])))
+        if missing := sorted(
+            {c.variable for c in conditions if c.variable not in self.ds}
+        ):
+            raise BadRequestError(
+                f"Invalid where condition: variable {', '.join(map(repr, missing))} "
+                "not found in the dataset"
+            )
 
-        # Chunk the involved variables by their on-disk chunking (dask stays
-        # lazy) so the comparisons and the mask defer all reads to the
-        # windowed read path instead of materializing the full slice here on
-        # every request, /tilejson.json and /info included.
-        ds = self.ds.copy()
-        for name in {self.variable, *(name for _, name, _, _ in conditions)}:
-            da = ds[name]
-            if da.chunks is None:
-                preferred = da.encoding.get("preferred_chunks") or dict(
-                    zip(da.dims, da.encoding.get("chunksizes") or ())
-                )
-                ds[name] = da.chunk(
-                    {d: preferred.get(d, _FALLBACK_CHUNK_SIZE) for d in da.dims},
-                    chunked_array_type="dask",
-                )
-
+        # Chunk the involved variables so the comparisons and the mask
+        # defer all reads to the windowed read path instead of
+        # materializing the full slice here on every request,
+        # /tilejson.json and /info included. self.input was extracted from
+        # the unchunked variables, so re-extract from the chunked ones.
+        ds = chunk_for_lazy_ops(
+            self.ds, {self.variable, *(c.variable for c in conditions)}
+        )
         data = get_variable(ds, self.variable, sel=self.sel)
         mask = None
-        for condition, name, op, value in conditions:
+        for condition in conditions:
+            name = condition.variable
             # a mask may legitimately lack some of the request's dimensions
             # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
             # only the selectors whose dimension the mask variable has
@@ -366,13 +418,13 @@ class XarrayReader(Reader):
                 da = get_variable(ds, name, sel=sel)
             except (KeyError, AssertionError, ValueError) as e:
                 raise BadRequestError(
-                    f"Invalid where condition {condition!r}: {name!r} cannot "
+                    f"Invalid where condition {condition.raw!r}: {name!r} cannot "
                     f"mask {self.variable!r} for this request"
                 ) from e
             extra_dims = set(da.dims) - set(self.input.dims)
             if extra_dims:
                 raise BadRequestError(
-                    f"Invalid where condition {condition!r}: {name!r} has "
+                    f"Invalid where condition {condition.raw!r}: {name!r} has "
                     f"dimensions {sorted(map(str, extra_dims))} that "
                     f"{self.variable!r} does not"
                 )
@@ -384,13 +436,15 @@ class XarrayReader(Reader):
                 xr.align(data, da, join="exact")
             except ValueError as e:
                 raise BadRequestError(
-                    f"Invalid where condition {condition!r}: {name!r} "
+                    f"Invalid where condition {condition.raw!r}: {name!r} "
                     f"coordinates do not match {self.variable!r}'s"
                 ) from e
             # NaN compares False for every operator except != — without
             # this a fill pixel in the flag variable passes `flag!=1`
             # while failing the equivalent `flag==0`
-            comparison = _WHERE_PREDICATE_BY_OP[op](da, value) & da.notnull()
+            comparison = (
+                _WHERE_PREDICATE_BY_OP[condition.op](da, condition.value) & da.notnull()
+            )
             mask = comparison if mask is None else mask & comparison
         masked = data.where(mask)
         # .where() drops encoding, and with it rio.nodata (read from
