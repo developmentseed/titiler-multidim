@@ -9,6 +9,7 @@ import re
 import time
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -258,7 +259,7 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
-_WHERE_OPS: Dict[str, Callable[[xr.DataArray, float], xr.DataArray]] = {
+_WHERE_PREDICATE_BY_OP: Dict[str, Callable[[xr.DataArray, float], xr.DataArray]] = {
     "==": operator.eq,
     "!=": operator.ne,
     "<": operator.lt,
@@ -269,9 +270,9 @@ _WHERE_OPS: Dict[str, Callable[[xr.DataArray, float], xr.DataArray]] = {
 
 # Use re.escape as a safety mechanism, in case an op string happens to contain
 # any re metacharacter.
-_WHERE_CONDITION = re.compile(
+_WHERE_CONDITION_RE = re.compile(
     r"^\s*(?P<variable>[\w.-]+)\s*"
-    rf"(?P<op>{'|'.join(map(re.escape, _WHERE_OPS))})\s*"
+    rf"(?P<op>{'|'.join(map(re.escape, _WHERE_PREDICATE_BY_OP))})\s*"
     r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
 )
 
@@ -323,12 +324,12 @@ class XarrayReader(Reader):
             return
         conditions = []
         for condition in self.where:
-            parsed = _WHERE_CONDITION.match(condition)
+            parsed = _WHERE_CONDITION_RE.match(condition)
             if not parsed:
                 raise BadRequestError(
                     f"Invalid where condition {condition!r}: expected "
                     "`{variable}{op}{number}` with op one of "
-                    f"{', '.join(_WHERE_OPS)}"
+                    f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
                 )
             name = parsed["variable"]
             if name not in self.ds:
@@ -350,7 +351,7 @@ class XarrayReader(Reader):
                     zip(da.dims, da.encoding.get("chunksizes") or ())
                 )
                 ds[name] = da.chunk(
-                    {d: preferred.get(d, _FALLBACK_CHUNK) for d in da.dims},
+                    {d: preferred.get(d, _FALLBACK_CHUNK_SIZE) for d in da.dims},
                     chunked_array_type="dask",
                 )
 
@@ -389,7 +390,7 @@ class XarrayReader(Reader):
             # NaN compares False for every operator except != — without
             # this a fill pixel in the flag variable passes `flag!=1`
             # while failing the equivalent `flag==0`
-            comparison = _WHERE_OPS[op](da, value) & da.notnull()
+            comparison = _WHERE_PREDICATE_BY_OP[op](da, value) & da.notnull()
             mask = comparison if mask is None else mask & comparison
         masked = data.where(mask)
         # .where() drops encoding, and with it rio.nodata (read from

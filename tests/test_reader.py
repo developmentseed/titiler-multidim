@@ -284,4 +284,4 @@ class TestApplyWhere:
         with reader.XarrayReader(
             src_path=path, variable="data", decode_times=False, where=["mask2d>=0"]
         ) as src:
-            assert max(src.input.chunksizes["y"]) <= reader._FALLBACK_CHUNK
+            assert max(src.input.chunksizes["y"]) <= reader._FALLBACK_CHUNK_SIZE
