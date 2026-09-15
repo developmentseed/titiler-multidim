@@ -58,7 +58,7 @@ runs:
         if [[ -z "${INPUTS_SCRIPT_PATH}" ]]; then
         ./scripts/sync-env.sh "${INPUTS_ENV_AWS_SECRET_NAME}"
         else
-        python ${INPUTS_SCRIPT_PATH} --secret-id ${INPUTS_ENV_AWS_SECRET_NAME}
+        python "${INPUTS_SCRIPT_PATH}" --secret-id "${INPUTS_ENV_AWS_SECRET_NAME}"
         fi
 
     - name: CDK Synth
