@@ -27,6 +27,8 @@ runs:
         node-version: 22
 
     - uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+      env:
+          cache-name: cache-node-modules
       with:
         path: ~/.npm
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{
