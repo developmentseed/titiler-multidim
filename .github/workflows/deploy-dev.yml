@@ -67,7 +67,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Run titiler-multidim deployment
-        uses: ./.github/actions/cdk-deploy
+        uses: $/.github/actions/cdk-deploy
         with:
           dir: "./infrastructure/aws"
           env_aws_secret_name: ""
