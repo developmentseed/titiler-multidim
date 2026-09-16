@@ -1,5 +1,9 @@
 # titiler-multidim
 
+[![CI](https://github.com/developmentseed/titiler-multidim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/developmentseed/titiler-multidim/actions/workflows/ci.yml?query=branch%3Amain)
+[![License](https://img.shields.io/github/license/developmentseed/titiler-multidim.svg)](https://github.com/developmentseed/titiler-multidim/blob/main/LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/developmentseed/titiler-multidim/badge)](https://scorecard.dev/viewer/?uri=github.com/developmentseed/titiler-multidim)
+
 Example of application built with `titiler.xarray` [package](https://developmentseed.org/titiler/packages/xarray/)
 
 ---
