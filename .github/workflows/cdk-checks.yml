@@ -66,6 +66,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # "$/" is GitHub's self-repository syntax: resolves this action from the
+      # commit the workflow itself is running from, not from the working directory.
       - uses: $/.github/actions/cdk-deploy
         with:
           dir: 'infrastructure/aws'
