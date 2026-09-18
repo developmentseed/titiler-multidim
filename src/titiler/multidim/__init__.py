@@ -1,3 +1,5 @@
-"""titiler.multidim"""
+"""titiler.multidim."""
 
-__version__ = "0.7.1"
+from importlib.metadata import version as package_version
+
+__version__ = package_version("titiler-multidim")
