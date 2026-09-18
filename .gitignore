@@ -112,3 +112,5 @@ cdk.context.json
 
 dev-docs/brainstorms/
 dev-docs/plans/
+
+.worktrees/
