@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 def _add_trailing(prefix: str) -> str:
     """Normalize like icechunk's add_trailing: append '/' only if absent."""
-    return prefix if prefix.endswith("/") else prefix + "/"
+    return prefix if prefix.endswith("/") else f"{prefix}/"
 
 
 class _CloudChunkAccess(BaseModel):
@@ -195,7 +195,7 @@ def parse_chunk_access(
             )
         # urlparse lowercases the scheme, but icechunk matches container
         # prefixes byte for byte apart from appending a missing trailing
-        # slash, so an entry spelled 'S3://…' would validate here yet
+        # slash, so an entry spelled 'S3://...' would validate here yet
         # never match at request time
         if not prefix.startswith(f"{scheme}://"):
             raise ValueError(

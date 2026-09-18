@@ -324,5 +324,5 @@ def test_earthdata_endpoints_doubled_slash_does_not_match():
     credential icechunk will never apply."""
     from titiler.multidim.chunk_access import earthdata_endpoints, parse_chunk_access
 
-    entries = parse_chunk_access({REGISTRY_PREFIX + "/": {"earthdata": True}})
+    entries = parse_chunk_access({f"{REGISTRY_PREFIX}/": {"earthdata": True}})
     assert earthdata_endpoints(entries, [REGISTRY_PREFIX]) == []
