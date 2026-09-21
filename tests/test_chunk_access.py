@@ -297,3 +297,32 @@ def test_earthdata_entry_builds_refreshable_credential():
         creds = build({REGISTRY_PREFIX: {"earthdata": True}})
     assert creds is not None
     assert REGISTRY_PREFIX in creds
+
+
+def test_earthdata_endpoints_ignore_trailing_slash_mismatch():
+    """icechunk normalizes container prefixes and credential keys with a
+    trailing slash, so a config entry differing from the declared container
+    only by that slash still has its credential used for virtual reads —
+    endpoint priming must match it the same way."""
+    from titiler.multidim.chunk_access import (
+        earthdata_endpoints,
+        parse_chunk_access as parse_current,
+    )
+
+    entries = parse_current({REGISTRY_PREFIX.rstrip("/"): {"earthdata": True}})
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX]) == [PODAAC_ENDPOINT]
+
+    entries = parse_current({REGISTRY_PREFIX: {"earthdata": True}})
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX.rstrip("/")]) == [
+        PODAAC_ENDPOINT
+    ]
+
+
+def test_earthdata_endpoints_doubled_slash_does_not_match():
+    """icechunk's add_trailing only appends — it never collapses '//' — so
+    an entry differing by a doubled slash must not prime endpoints for a
+    credential icechunk will never apply."""
+    from titiler.multidim.chunk_access import earthdata_endpoints, parse_chunk_access
+
+    entries = parse_chunk_access({REGISTRY_PREFIX + "/": {"earthdata": True}})
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX]) == []

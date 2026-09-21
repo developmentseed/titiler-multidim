@@ -874,6 +874,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/5f/7c22733da92b3a6cc4dddcaa8731089d213c2790bbc997e51c429a4e8f8b/dask-2026.7.1-py3-none-any.whl", hash = "sha256:985ffd6c5e9d7979ede515e84ae8d39b647d6aa64f77600f15714ff65f578fe6", size = 1496882, upload-time = "2026-07-14T01:06:20.341Z" },
 ]
 
+[package.optional-dependencies]
+array = [
+    { name = "numpy" },
+]
+
 [[package]]
 name = "debugpy"
 version = "1.8.20"
@@ -3346,6 +3351,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "cftime" },
+    { name = "dask", extra = ["array"] },
     { name = "earthaccess-auth" },
     { name = "fastapi" },
     { name = "fsspec" },
@@ -3390,7 +3396,6 @@ deployment = [
     { name = "python-dotenv" },
 ]
 dev = [
-    { name = "dask" },
     { name = "httpx2" },
     { name = "ipykernel" },
     { name = "ipython" },
@@ -3417,6 +3422,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "boto3", specifier = ">=1.39.0" },
     { name = "cftime" },
+    { name = "dask", extras = ["array"], specifier = ">=2026.3.0" },
     { name = "earthaccess-auth", specifier = ">=0.3.1" },
     { name = "fastapi" },
     { name = "fsspec" },
@@ -3455,7 +3461,6 @@ deployment = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
 ]
 dev = [
-    { name = "dask", specifier = ">=2026.3.0" },
     { name = "httpx2" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "ipython", specifier = ">=9.13.0" },
