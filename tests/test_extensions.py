@@ -3,9 +3,12 @@
 import pytest
 
 
-def test_dataset_metadata_extension_uses_one_url(app):
-    """Dataset metadata routes accept one URL without raster parameters."""
-    params = {"url": "tests/fixtures/testfile.nc"}
+def test_dataset_metadata_extension_uses_first_url(app):
+    """Dataset metadata routes use the first of repeated source URLs."""
+    params = [
+        ("url", "tests/fixtures/testfile.nc"),
+        ("url", "tests/fixtures/does-not-exist.nc"),
+    ]
 
     keys = app.get("/dataset/keys", params=params)
     metadata = app.get("/dataset/dict", params=params)
@@ -28,11 +31,39 @@ def test_dataset_metadata_extension_uses_one_url(app):
 @pytest.mark.parametrize(
     "path", ["/dataset/", "/dataset/dict", "/dataset/keys", "/validate"]
 )
-def test_dataset_metadata_extension_documents_a_single_url(app, path):
-    """Dataset metadata routes expose url as a scalar query parameter."""
+def test_dataset_metadata_extension_documents_repeated_urls(app, path):
+    """Dataset metadata routes expose repeated url query parameters."""
     parameters = app.get("/api").json()["paths"][path]["get"]["parameters"]
     url_parameter = next(
         parameter for parameter in parameters if parameter["name"] == "url"
     )
 
-    assert url_parameter["schema"]["type"] == "string"
+    assert url_parameter["schema"]["type"] == "array"
+    assert url_parameter["schema"]["items"]["type"] == "string"
+
+
+def test_metadata_opener_uses_first_url_and_configured_authorization(app, monkeypatch):
+    """The local opener passes the first URL and configured access to guess_opener."""
+    from titiler.multidim import extensions
+
+    captured = {}
+
+    def fake_guess_opener(src_path, **kwargs):
+        captured["src_path"] = src_path
+        captured.update(kwargs)
+        return "dataset"
+
+    monkeypatch.setattr(extensions, "guess_opener", fake_guess_opener)
+
+    assert (
+        extensions.open_metadata_dataset(
+            ["first.zarr", "second.zarr"], group="group", decode_times=False
+        )
+        == "dataset"
+    )
+    assert captured == {
+        "src_path": "first.zarr",
+        "group": "group",
+        "decode_times": False,
+        "authorize_virtual_chunk_access": extensions.api_settings.authorized_chunk_access,
+    }
