@@ -4,6 +4,13 @@
 
 * nothing
 
+## [0.9.1](https://github.com/developmentseed/titiler-multidim/compare/v0.9.0...v0.9.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* use dataset extension from titiler.extensions ([#159](https://github.com/developmentseed/titiler-multidim/issues/159)) ([a8d622b](https://github.com/developmentseed/titiler-multidim/commit/a8d622bb704dfbe336a4cd586ebba117ad08bf8b))
+
 ## [0.9.0](https://github.com/developmentseed/titiler-multidim/compare/v0.8.0...v0.9.0) (2026-09-03)
 
 
