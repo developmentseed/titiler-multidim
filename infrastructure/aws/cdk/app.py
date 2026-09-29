@@ -34,6 +34,11 @@ DEFAULT_ENV = {
     "GDAL_HTTP_MERGE_CONSECUTIVE_RANGES": "YES",
     "GDAL_HTTP_MULTIPLEX": "YES",
     "GDAL_HTTP_VERSION": "2",
+    # VRT raw-band sources can point GDAL at arbitrary files; GDAL >= 3.12
+    # defaults are already restrictive, pinned so a base-image bump can't relax
+    # them (https://gdal.org/en/stable/user/security.html#gdal-vrt-driver)
+    "GDAL_VRT_ENABLE_RAWRASTERBAND": "NO",
+    "GDAL_VRT_RAWRASTERBAND_ALLOWED_SOURCE": "SIBLING_OR_CHILD_OF_VRT_PATH",
     "PYTHONWARNINGS": "ignore",
     "VSI_CACHE": "TRUE",
     "VSI_CACHE_SIZE": "5000000",  # 5 MB (per file-handle)
