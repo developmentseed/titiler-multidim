@@ -23,7 +23,7 @@ import os
 import threading
 import time
 
-from earthaccess_auth.exceptions import LoginStrategyUnavailable
+from earthaccess_auth.exceptions import LoginAttemptFailure, LoginStrategyUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,12 @@ math.inf = latched permanently (ambient identity, or no ARN configured)."""
 _last_secret: str | None = None
 """The last successfully applied secret string; an unchanged secret on
 refresh skips re-applying (and re-probing) the identity."""
+
+_load_error: str | None = None
+"""Sanitized message of a failed *first* load, re-raised for requests in
+its backoff window. Without it those requests fall through to
+earthaccess-auth's generic "no non-interactive EDL login strategy" error,
+which hides whether the secret was unusable or its login was rejected."""
 
 
 def _usable_env_identity() -> bool:
@@ -88,6 +94,16 @@ def _rebuild_default_auth() -> None:
     try:
         auth = Auth()
         auth.login(strategy="environment")
+    except LoginAttemptFailure as e:
+        # only the username/password branch calls EDL (a token is accepted
+        # as-is), so this is EDL refusing that pair, or an EDL outage
+        logger.error("EDL login with the earthdata secret failed: %s", e)
+        msg = (
+            "Earthdata Login did not accept the EARTHDATA_USERNAME/"
+            "EARTHDATA_PASSWORD in the earthdata secret (wrong credentials, "
+            "or an Earthdata Login outage); see the service logs for details"
+        )
+        raise LoginStrategyUnavailable(msg) from e
     except Exception as e:
         # login() can hit EDL over HTTP (username/password secrets) and
         # raise LoginAttemptFailure with the raw EDL response body, or a
@@ -281,9 +297,8 @@ def ensure_earthdata_credentials() -> None:
     one secret). The secret is re-read every ``_REFRESH_INTERVAL`` seconds
     so rotation needs neither a redeploy nor a restart. A failed *first*
     load raises, then backs off ``_RETRY_INTERVAL`` — calls inside the
-    window return without fetching (credential use then fails downstream
-    with a typed, sanitized error) instead of hammering Secrets Manager on
-    every request. A failure while *refreshing* an already-loaded identity —
+    window re-raise that failure without fetching instead of hammering
+    Secrets Manager on every request. A failure while *refreshing* an already-loaded identity —
     whether fetching the secret, parsing it, or logging the rotated
     credentials in — does not fail the request either: the warm identity
     (exported env vars plus the default auth manager built around them) is
@@ -292,16 +307,19 @@ def ensure_earthdata_credentials() -> None:
 
     Raises:
         LoginStrategyUnavailable: If the secret cannot be fetched on first
-            load, or holds no recognized credential keys. Mapped to an HTTP
+            load, holds no recognized credential keys, or its login fails —
+            and again, with the same message, for calls inside that
+            failure's backoff window. Mapped to an HTTP
             error by the app's exception handlers; details go to the
             service log.
     """
-    global _next_refresh, _last_secret
-    if _next_refresh is not None and time.monotonic() < _next_refresh:
+    global _next_refresh, _last_secret, _load_error
+    if _in_backoff():
         return
     with _lock:
-        if _next_refresh is not None and time.monotonic() < _next_refresh:
+        if _in_backoff():
             return
+        _load_error = None
         arn = _secret_arn_unless_latched()
         if arn is None:
             return
@@ -324,8 +342,9 @@ def ensure_earthdata_credentials() -> None:
         if secret != _last_secret:
             try:
                 applied = _apply_secret(secret, rotating=refreshing)
-            except LoginStrategyUnavailable:
+            except LoginStrategyUnavailable as e:
                 # unusable first secret: same backoff as a failed first fetch
+                _load_error = str(e)
                 _next_refresh = time.monotonic() + _RETRY_INTERVAL
                 raise
             if not applied:
@@ -335,6 +354,23 @@ def ensure_earthdata_credentials() -> None:
                 return
             _last_secret = secret
         _next_refresh = time.monotonic() + _REFRESH_INTERVAL
+
+
+def _in_backoff() -> bool:
+    """Whether the current check deadline is still in the future.
+
+    Returns:
+        True inside the window, False when the secret is due for a check.
+
+    Raises:
+        LoginStrategyUnavailable: Inside the backoff window of a failed
+            first load, repeating that load's sanitized error.
+    """
+    if _next_refresh is None or time.monotonic() >= _next_refresh:
+        return False
+    if _load_error is not None:
+        raise LoginStrategyUnavailable(_load_error)
+    return True
 
 
 def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
@@ -349,7 +385,7 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
         LoginStrategyUnavailable: When there is nothing to fall back to
             (sanitized; details go to the service log).
     """
-    global _next_refresh
+    global _next_refresh, _load_error
     # str() of this exception is returned to unauthenticated HTTP clients
     # by the app's 500 handler, so the ARN and raw AWS error stay in the
     # log only
@@ -374,12 +410,13 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
             "earthdata secret loads"
         )
         return
-    # nothing to fall back to: requests inside the window return without
-    # credentials and fail fast downstream with a typed, sanitized error
+    # nothing to fall back to: requests inside the window re-raise this
+    # error without fetching (see _in_backoff)
     msg = (
         "failed to load Earthdata Login credentials from the "
         "configured secret; see the service logs for details"
     )
+    _load_error = msg
     raise LoginStrategyUnavailable(msg) from e
 
 
