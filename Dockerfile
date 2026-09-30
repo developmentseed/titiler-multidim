@@ -1,63 +1,51 @@
-ARG PYTHON_VERSION=3.12
-
-# ---------- Builder stage ----------
-# Ubuntu-small-latest ships Ubuntu 24.04 + Python 3.12, matching this
-# project's `requires-python = ">=3.12"`. Pin to a specific GDAL version
-# tag (see https://github.com/OSGeo/gdal/pkgs/container/gdal) if you need
-# reproducible builds.
-FROM ghcr.io/osgeo/gdal:ubuntu-small-latest AS builder
-
-ARG PYTHON_VERSION
-ENV DEBIAN_FRONTEND=noninteractive
+# ---------- Builder ----------
+FROM ghcr.io/osgeo/gdal:ubuntu-small-<PINNED_TAG> AS builder
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 \
-        python3-venv \
-        python3-pip \
-        build-essential \
-        curl \
-        ca-certificates \
+        python3 python3-venv build-essential ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (fast resolver/installer used by the project)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:<PINNED_VERSION> /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy only dependency-defining files first for better layer caching
-COPY pyproject.toml uv.lock* README.md ./
+# 1) dependencies only (cached until pyproject/uv.lock change)
+COPY pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra server --no-install-project
+
+# 2) project code
 COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --extra server --no-editable
 
-# Install the project + its "server" extra (adds uvicorn) into a venv,
-# without the heavier dev/deployment/notebooks dependency groups.
-RUN uv venv /opt/venv \
-    && VIRTUAL_ENV=/opt/venv uv pip install ".[server]"
-
-# ---------- Runtime stage ----------
-FROM ghcr.io/osgeo/gdal:ubuntu-small-latest AS runtime
-
+# ---------- Runtime ----------
+FROM ghcr.io/osgeo/gdal:ubuntu-small-<PINNED_TAG> AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 \
-        ca-certificates \
-        curl \
+        python3 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home titiler
+    && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin titiler
 
 COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
-    PORT=8000
+    PORT=8000 \
+    WEB_CONCURRENCY=4
 
-USER titiler
-WORKDIR /home/titiler
-
+USER 10001
+WORKDIR /tmp
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS "http://localhost:${PORT}/healthz" || exit 1
 
-CMD ["sh", "-c", "uvicorn titiler.multidim.main:app --host ${HOST} --port ${PORT}"]
+CMD ["sh", "-c", "exec uvicorn titiler.multidim.main:app --host ${HOST} --port ${PORT} --proxy-headers --forwarded-allow-ips='*' --timeout-keep-alive 75"]
