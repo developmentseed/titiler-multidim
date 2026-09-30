@@ -188,14 +188,16 @@ def parse_chunk_access(
             raise ValueError(
                 f"unsupported scheme {scheme!r} for virtual chunk entry {prefix!r}"
             )
-        # urlparse lowercases the scheme, but icechunk matches container
-        # prefixes character for character, so an entry spelled 'S3://…'
-        # would validate here yet never match at request time
-        if not prefix.startswith(f"{scheme}://"):
+        # Two spellings validate here yet misbehave at request time, so fail
+        # at parse time instead. urlparse lowercases the scheme, but icechunk
+        # matches container prefixes character for character, so 'S3://...'
+        # never matches. icechunk adds a missing trailing slash before
+        # matching, so a slash-less entry still gets its credential for chunk
+        # reads yet is skipped by endpoint priming (earthdata_endpoints).
+        if not prefix.startswith(f"{scheme}://") or not prefix.endswith("/"):
             raise ValueError(
                 f"virtual chunk entry {prefix!r} must begin with lowercase "
-                f"'{scheme}://'; icechunk matches container prefixes by exact "
-                "string, so other spellings are silently ignored"
+                f"'{scheme}://' and end with a trailing slash"
             )
         if isinstance(options, BaseModel):
             if not isinstance(options, model):
@@ -251,7 +253,10 @@ def earthdata_endpoints(
     Returns:
         Sorted ``s3credentials`` endpoint URLs.
     """
-    declared = set(declared_prefixes)
+    # Entries always end with a slash (parse_chunk_access enforces it), but
+    # a repository written before icechunk 1.1 may declare a container
+    # without one. icechunk adds the slash before matching, so do the same.
+    declared = {p if p.endswith("/") else f"{p}/" for p in declared_prefixes}
     endpoints = set()
     for prefix, entry in entries.items():
         if isinstance(entry, S3ChunkAccess) and entry.earthdata and prefix in declared:

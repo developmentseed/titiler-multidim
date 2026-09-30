@@ -297,3 +297,22 @@ def test_earthdata_entry_builds_refreshable_credential():
         creds = build({REGISTRY_PREFIX: {"earthdata": True}})
     assert creds is not None
     assert REGISTRY_PREFIX in creds
+
+
+def test_prefix_without_trailing_slash_is_rejected():
+    # icechunk adds a missing trailing slash before matching, so a slash-less
+    # entry would still work for chunk reads yet be skipped by endpoint
+    # priming. Fail at parse time instead of matching loosely.
+    with pytest.raises(ValueError, match="trailing slash"):
+        build({REGISTRY_PREFIX.rstrip("/"): {"earthdata": True}})
+
+
+def test_earthdata_endpoints_match_container_declared_without_slash():
+    # icechunk adds a missing trailing slash to a declared container prefix
+    # before matching it, so priming must match such a container too.
+    from titiler.multidim.chunk_access import earthdata_endpoints, parse_chunk_access
+
+    entries = parse_chunk_access({REGISTRY_PREFIX: {"earthdata": True}})
+    assert earthdata_endpoints(entries, [REGISTRY_PREFIX.rstrip("/")]) == [
+        PODAAC_ENDPOINT
+    ]
