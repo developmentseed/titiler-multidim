@@ -3,11 +3,19 @@
 When ``earthdata_secret_arn`` is configured, the first earthdata code path
 to run pulls the secret from AWS Secrets Manager and exports it as the
 ``EARTHDATA_*`` environment variables that earthaccess-auth's
-non-interactive login strategy consumes. The configured secret is
-authoritative — a stale ambient ``EARTHDATA_*`` identity must not disable
-rotation — but ambient credentials still serve as a fallback while the
-secret is unreachable, and outright when no ARN is configured, so local
-development, tests, and netrc setups behave exactly as before.
+non-interactive login strategy consumes.
+
+Precedence between the secret and ``EARTHDATA_*`` variables already in the
+environment:
+
+- ARN configured and the secret loads: the secret wins, even when the
+  environment already holds a working identity. If the environment were
+  allowed to satisfy the login, the secret would never be read, and
+  rotating it would have no effect until a restart.
+- ARN configured but the secret cannot be fetched: the environment
+  identity serves while the fetch is retried on a backoff.
+- No ARN configured: the environment identity is used as before, so local
+  development, tests, and netrc setups are unchanged.
 
 The fetch is deliberately lazy rather than at import or app startup: the
 Lambda deployment uses SnapStart, which freezes init-time state into the
@@ -423,16 +431,16 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
 def _secret_arn_unless_latched() -> str | None:
     """Read the configured secret ARN; call with ``_lock`` held.
 
-    Configuring an ARN is an explicit operator action, so the secret is
-    authoritative: a stale-but-truthy ambient ``EARTHDATA_*`` identity
-    must not latch and silently disable rotation-without-restart (the
-    ambient identity still serves as a fallback while the secret is
-    unreachable, and outright when no ARN is configured — local
-    development, tests, netrc setups).
+    Configuring an ARN is an explicit operator action, so the secret takes
+    precedence over any ``EARTHDATA_*`` identity already in the
+    environment. Letting a present environment identity satisfy the login
+    would latch ``_next_refresh`` and quietly disable secret rotation
+    until the next restart. See the module docstring for the full
+    precedence rules, including the fallbacks.
 
     Returns:
-        The configured secret ARN, or None when no ARN is configured — in
-        which case ``_next_refresh`` latches permanently.
+        The configured secret ARN, or None when no ARN is configured. In
+        that case ``_next_refresh`` latches permanently.
     """
     global _next_refresh
     from titiler.multidim.settings import ApiSettings
