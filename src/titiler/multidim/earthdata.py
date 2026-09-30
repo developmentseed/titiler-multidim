@@ -3,11 +3,19 @@
 When ``earthdata_secret_arn`` is configured, the first earthdata code path
 to run pulls the secret from AWS Secrets Manager and exports it as the
 ``EARTHDATA_*`` environment variables that earthaccess-auth's
-non-interactive login strategy consumes. The configured secret is
-authoritative — a stale ambient ``EARTHDATA_*`` identity must not disable
-rotation — but ambient credentials still serve as a fallback while the
-secret is unreachable, and outright when no ARN is configured, so local
-development, tests, and netrc setups behave exactly as before.
+non-interactive login strategy consumes.
+
+Precedence between the secret and ``EARTHDATA_*`` variables already in the
+environment:
+
+- ARN configured and the secret loads: the secret wins, even when the
+  environment already holds a working identity. If the environment were
+  allowed to satisfy the login, the secret would never be read, and
+  rotating it would have no effect until a restart.
+- ARN configured but the secret cannot be fetched: the environment
+  identity serves while the fetch is retried on a backoff.
+- No ARN configured: the environment identity is used as before, so local
+  development, tests, and netrc setups are unchanged.
 
 The fetch is deliberately lazy rather than at import or app startup: the
 Lambda deployment uses SnapStart, which freezes init-time state into the
@@ -23,7 +31,7 @@ import os
 import threading
 import time
 
-from earthaccess_auth.exceptions import LoginStrategyUnavailable
+from earthaccess_auth.exceptions import LoginAttemptFailure, LoginStrategyUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +57,12 @@ math.inf = latched permanently (ambient identity, or no ARN configured)."""
 _last_secret: str | None = None
 """The last successfully applied secret string; an unchanged secret on
 refresh skips re-applying (and re-probing) the identity."""
+
+_load_error: str | None = None
+"""Sanitized message of a failed *first* load, re-raised for requests in
+its backoff window. Without it those requests fall through to
+earthaccess-auth's generic "no non-interactive EDL login strategy" error,
+which hides whether the secret was unusable or its login was rejected."""
 
 
 def _usable_env_identity() -> bool:
@@ -88,6 +102,16 @@ def _rebuild_default_auth() -> None:
     try:
         auth = Auth()
         auth.login(strategy="environment")
+    except LoginAttemptFailure as e:
+        # only the username/password branch calls EDL (a token is accepted
+        # as-is), so this is EDL refusing that pair, or an EDL outage
+        logger.error("EDL login with the earthdata secret failed: %s", e)
+        msg = (
+            "Earthdata Login did not accept the EARTHDATA_USERNAME/"
+            "EARTHDATA_PASSWORD in the earthdata secret (wrong credentials, "
+            "or an Earthdata Login outage); see the service logs for details"
+        )
+        raise LoginStrategyUnavailable(msg) from e
     except Exception as e:
         # login() can hit EDL over HTTP (username/password secrets) and
         # raise LoginAttemptFailure with the raw EDL response body, or a
@@ -271,37 +295,50 @@ def prime_earthdata_endpoints(endpoints) -> None:
 
 
 def ensure_earthdata_credentials() -> None:
-    """Populate EDL environment credentials from Secrets Manager.
+    """Load EDL credentials from Secrets Manager into the environment.
 
-    No-op when no secret ARN is configured (an ambient ``EARTHDATA_*``
-    identity then latches untouched). The secret may be a plain EDL
-    token string, or a JSON object holding any of ``EARTHDATA_TOKEN`` /
-    ``EARTHDATA_USERNAME`` / ``EARTHDATA_PASSWORD`` (the username/password
-    shape matches titiler-cmr's deployments, so the two services can share
-    one secret). The secret is re-read every ``_REFRESH_INTERVAL`` seconds
-    so rotation needs neither a redeploy nor a restart. A failed *first*
-    load raises, then backs off ``_RETRY_INTERVAL`` — calls inside the
-    window return without fetching (credential use then fails downstream
-    with a typed, sanitized error) instead of hammering Secrets Manager on
-    every request. A failure while *refreshing* an already-loaded identity —
-    whether fetching the secret, parsing it, or logging the rotated
-    credentials in — does not fail the request either: the warm identity
-    (exported env vars plus the default auth manager built around them) is
-    still valid, so it keeps serving and the failure is logged and retried
-    after ``_RETRY_INTERVAL`` instead.
+    Does nothing when no secret ARN is configured. Any ``EARTHDATA_*``
+    identity already in the environment is then used as is.
+
+    The secret is either a plain EDL token string or a JSON object with
+    any of ``EARTHDATA_TOKEN``, ``EARTHDATA_USERNAME``, and
+    ``EARTHDATA_PASSWORD``. The username and password shape is what
+    titiler-cmr deploys, so the two services can share one secret.
+
+    The secret is re-read every ``_REFRESH_INTERVAL`` seconds, so rotating
+    it needs neither a redeploy nor a restart. A failure is handled
+    according to whether an identity is already loaded:
+
+    - First load fails and the environment holds no usable identity:
+      this call raises. Calls made within the next ``_RETRY_INTERVAL``
+      seconds raise the same error without contacting Secrets Manager
+      again.
+    - First load fails but the environment holds a usable identity: that
+      identity serves, and the secret is retried after
+      ``_RETRY_INTERVAL`` seconds. This applies to fetch failures only.
+      A secret that fetches but cannot be parsed or logged in raises as
+      above.
+    - Refresh fails, whether fetching, parsing, or logging in with the
+      rotated secret: the request is unaffected. The identity loaded
+      earlier (the exported variables and the auth manager built on them)
+      is still valid and keeps serving. The failure is logged and retried
+      after ``_RETRY_INTERVAL`` seconds.
 
     Raises:
-        LoginStrategyUnavailable: If the secret cannot be fetched on first
-            load, or holds no recognized credential keys. Mapped to an HTTP
-            error by the app's exception handlers; details go to the
-            service log.
+        LoginStrategyUnavailable: On a failed first load with nothing to
+            fall back to. The secret could not be fetched, held no
+            recognized credential keys, or EDL rejected its login. Calls
+            inside the backoff window raise the same error again. The
+            app's exception handlers map it to an HTTP error. Details go
+            to the service log only.
     """
-    global _next_refresh, _last_secret
-    if _next_refresh is not None and time.monotonic() < _next_refresh:
+    global _next_refresh, _last_secret, _load_error
+    if _in_backoff():
         return
     with _lock:
-        if _next_refresh is not None and time.monotonic() < _next_refresh:
+        if _in_backoff():
             return
+        _load_error = None
         arn = _secret_arn_unless_latched()
         if arn is None:
             return
@@ -324,8 +361,9 @@ def ensure_earthdata_credentials() -> None:
         if secret != _last_secret:
             try:
                 applied = _apply_secret(secret, rotating=refreshing)
-            except LoginStrategyUnavailable:
+            except LoginStrategyUnavailable as e:
                 # unusable first secret: same backoff as a failed first fetch
+                _load_error = str(e)
                 _next_refresh = time.monotonic() + _RETRY_INTERVAL
                 raise
             if not applied:
@@ -335,6 +373,23 @@ def ensure_earthdata_credentials() -> None:
                 return
             _last_secret = secret
         _next_refresh = time.monotonic() + _REFRESH_INTERVAL
+
+
+def _in_backoff() -> bool:
+    """Whether the current check deadline is still in the future.
+
+    Returns:
+        True inside the window, False when the secret is due for a check.
+
+    Raises:
+        LoginStrategyUnavailable: Inside the backoff window of a failed
+            first load, repeating that load's sanitized error.
+    """
+    if _next_refresh is None or time.monotonic() >= _next_refresh:
+        return False
+    if _load_error is not None:
+        raise LoginStrategyUnavailable(_load_error)
+    return True
 
 
 def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
@@ -349,7 +404,7 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
         LoginStrategyUnavailable: When there is nothing to fall back to
             (sanitized; details go to the service log).
     """
-    global _next_refresh
+    global _next_refresh, _load_error
     # str() of this exception is returned to unauthenticated HTTP clients
     # by the app's 500 handler, so the ARN and raw AWS error stay in the
     # log only
@@ -374,28 +429,30 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
             "earthdata secret loads"
         )
         return
-    # nothing to fall back to: requests inside the window return without
-    # credentials and fail fast downstream with a typed, sanitized error
+    # No identity is available at all. Remember the error so that requests
+    # arriving during the backoff window raise it again without another
+    # fetch (see _in_backoff).
     msg = (
         "failed to load Earthdata Login credentials from the "
         "configured secret; see the service logs for details"
     )
+    _load_error = msg
     raise LoginStrategyUnavailable(msg) from e
 
 
 def _secret_arn_unless_latched() -> str | None:
     """Read the configured secret ARN; call with ``_lock`` held.
 
-    Configuring an ARN is an explicit operator action, so the secret is
-    authoritative: a stale-but-truthy ambient ``EARTHDATA_*`` identity
-    must not latch and silently disable rotation-without-restart (the
-    ambient identity still serves as a fallback while the secret is
-    unreachable, and outright when no ARN is configured — local
-    development, tests, netrc setups).
+    Configuring an ARN is an explicit operator action, so the secret takes
+    precedence over any ``EARTHDATA_*`` identity already in the
+    environment. Letting a present environment identity satisfy the login
+    would latch ``_next_refresh`` and quietly disable secret rotation
+    until the next restart. See the module docstring for the full
+    precedence rules, including the fallbacks.
 
     Returns:
-        The configured secret ARN, or None when no ARN is configured — in
-        which case ``_next_refresh`` latches permanently.
+        The configured secret ARN, or None when no ARN is configured. In
+        that case ``_next_refresh`` latches permanently.
     """
     global _next_refresh
     from titiler.multidim.settings import ApiSettings

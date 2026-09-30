@@ -23,6 +23,7 @@ def clean_state(monkeypatch):
 
     monkeypatch.setattr(earthdata, "_next_refresh", None)
     monkeypatch.setattr(earthdata, "_last_secret", None)
+    monkeypatch.setattr(earthdata, "_load_error", None)
     for key in earthdata._ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.delenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", raising=False)
@@ -303,15 +304,18 @@ def test_fetch_failure_does_not_latch(monkeypatch):
 def test_first_load_fetch_failure_backs_off(monkeypatch):
     """A failing first load must not become a per-request Secrets Manager
     storm (the refresh path already backs off): within the retry window,
-    later requests fail fast without another GetSecretValue."""
+    later requests fail fast, with the same error, without another
+    GetSecretValue."""
     from titiler.multidim.earthdata import ensure_earthdata_credentials
 
     monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
     client = StubSecretsClient(error=RuntimeError("AccessDeniedException"))
     _install(monkeypatch, client)
-    with pytest.raises(LoginStrategyUnavailable):
+    with pytest.raises(LoginStrategyUnavailable) as first:
         ensure_earthdata_credentials()
-    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    with pytest.raises(LoginStrategyUnavailable) as again:
+        ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert str(again.value) == str(first.value)
     assert client.requested == [ARN]
 
 
@@ -322,9 +326,38 @@ def test_first_load_unusable_secret_backs_off(monkeypatch):
     monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
     client = StubSecretsClient(secret_string=json.dumps({"UNRELATED": "nope"}))
     _install(monkeypatch, client)
-    with pytest.raises(LoginStrategyUnavailable):
+    with pytest.raises(LoginStrategyUnavailable, match="usable identity"):
         ensure_earthdata_credentials()
-    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    with pytest.raises(LoginStrategyUnavailable, match="usable identity"):
+        ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    assert client.requested == [ARN]
+
+
+def test_rejected_username_password_is_reported_distinctly(monkeypatch):
+    """EDL refusing the secret's username/password must say so — not look
+    like missing credentials — for the first request and for every request
+    in the backoff window, without leaking EDL's response body."""
+    from earthaccess_auth.exceptions import LoginAttemptFailure
+
+    from titiler.multidim.earthdata import prime_earthdata_endpoints
+
+    monkeypatch.setenv("TITILER_MULTIDIM_EARTHDATA_SECRET_ARN", ARN)
+    secret = {"EARTHDATA_USERNAME": "u", "EARTHDATA_PASSWORD": "p"}
+    client = StubSecretsClient(secret_string=json.dumps(secret))
+    _install(monkeypatch, client)
+
+    class RejectingAuth:
+        authenticated = False
+
+        def login(self, strategy):
+            raise LoginAttemptFailure('{"error": "invalid_credentials"}')
+
+    monkeypatch.setattr("earthaccess_auth.auth.Auth", RejectingAuth)
+    for _ in range(2):
+        with pytest.raises(LoginStrategyUnavailable) as exc:
+            prime_earthdata_endpoints([])
+        assert "did not accept the EARTHDATA_USERNAME" in str(exc.value)
+        assert "invalid_credentials" not in str(exc.value)
     assert client.requested == [ARN]
 
 
@@ -728,7 +761,8 @@ def test_binary_secret_is_a_typed_failure_with_backoff(monkeypatch):
     _install(monkeypatch, client)
     with pytest.raises(LoginStrategyUnavailable):
         ensure_earthdata_credentials()
-    ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
+    with pytest.raises(LoginStrategyUnavailable):
+        ensure_earthdata_credentials()  # inside the backoff window: no re-fetch
     assert client.requested == [ARN]
 
 
