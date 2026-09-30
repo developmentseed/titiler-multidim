@@ -72,6 +72,7 @@ dev = [
     "netcdf4>=1.7.4",
     "pre-commit>=4.6.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-benchmark>=5.1",
     "pytest-cov>=7.1.0",
     "pytest>=9.0.3",
     "pytest-xdist",
