@@ -188,12 +188,8 @@ def parse_chunk_access(
             raise ValueError(
                 f"unsupported scheme {scheme!r} for virtual chunk entry {prefix!r}"
             )
-        # Two spellings validate here yet misbehave at request time, so fail
-        # at parse time instead. urlparse lowercases the scheme, but icechunk
-        # matches container prefixes character for character, so 'S3://...'
-        # never matches. icechunk adds a missing trailing slash before
-        # matching, so a slash-less entry still gets its credential for chunk
-        # reads yet is skipped by endpoint priming (earthdata_endpoints).
+        # Icechunk expects exact matches for the url scheme (e.g., s3:// rather than S3://)
+        # and trailing slashes. We want to verify here and fail fast.
         if not prefix.startswith(f"{scheme}://") or not prefix.endswith("/"):
             raise ValueError(
                 f"virtual chunk entry {prefix!r} must begin with lowercase "
