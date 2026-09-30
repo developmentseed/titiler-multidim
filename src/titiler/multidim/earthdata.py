@@ -295,31 +295,42 @@ def prime_earthdata_endpoints(endpoints) -> None:
 
 
 def ensure_earthdata_credentials() -> None:
-    """Populate EDL environment credentials from Secrets Manager.
+    """Load EDL credentials from Secrets Manager into the environment.
 
-    No-op when no secret ARN is configured (an ambient ``EARTHDATA_*``
-    identity then latches untouched). The secret may be a plain EDL
-    token string, or a JSON object holding any of ``EARTHDATA_TOKEN`` /
-    ``EARTHDATA_USERNAME`` / ``EARTHDATA_PASSWORD`` (the username/password
-    shape matches titiler-cmr's deployments, so the two services can share
-    one secret). The secret is re-read every ``_REFRESH_INTERVAL`` seconds
-    so rotation needs neither a redeploy nor a restart. A failed *first*
-    load raises, then backs off ``_RETRY_INTERVAL`` — calls inside the
-    window re-raise that failure without fetching instead of hammering
-    Secrets Manager on every request. A failure while *refreshing* an already-loaded identity —
-    whether fetching the secret, parsing it, or logging the rotated
-    credentials in — does not fail the request either: the warm identity
-    (exported env vars plus the default auth manager built around them) is
-    still valid, so it keeps serving and the failure is logged and retried
-    after ``_RETRY_INTERVAL`` instead.
+    Does nothing when no secret ARN is configured. Any ``EARTHDATA_*``
+    identity already in the environment is then used as is.
+
+    The secret is either a plain EDL token string or a JSON object with
+    any of ``EARTHDATA_TOKEN``, ``EARTHDATA_USERNAME``, and
+    ``EARTHDATA_PASSWORD``. The username and password shape is what
+    titiler-cmr deploys, so the two services can share one secret.
+
+    The secret is re-read every ``_REFRESH_INTERVAL`` seconds, so rotating
+    it needs neither a redeploy nor a restart. A failure is handled
+    according to whether an identity is already loaded:
+
+    - First load fails and the environment holds no usable identity:
+      this call raises. Calls made within the next ``_RETRY_INTERVAL``
+      seconds raise the same error without contacting Secrets Manager
+      again.
+    - First load fails but the environment holds a usable identity: that
+      identity serves, and the secret is retried after
+      ``_RETRY_INTERVAL`` seconds. This applies to fetch failures only.
+      A secret that fetches but cannot be parsed or logged in raises as
+      above.
+    - Refresh fails, whether fetching, parsing, or logging in with the
+      rotated secret: the request is unaffected. The identity loaded
+      earlier (the exported variables and the auth manager built on them)
+      is still valid and keeps serving. The failure is logged and retried
+      after ``_RETRY_INTERVAL`` seconds.
 
     Raises:
-        LoginStrategyUnavailable: If the secret cannot be fetched on first
-            load, holds no recognized credential keys, or its login fails —
-            and again, with the same message, for calls inside that
-            failure's backoff window. Mapped to an HTTP
-            error by the app's exception handlers; details go to the
-            service log.
+        LoginStrategyUnavailable: On a failed first load with nothing to
+            fall back to. The secret could not be fetched, held no
+            recognized credential keys, or EDL rejected its login. Calls
+            inside the backoff window raise the same error again. The
+            app's exception handlers map it to an HTTP error. Details go
+            to the service log only.
     """
     global _next_refresh, _last_secret, _load_error
     if _in_backoff():
@@ -418,8 +429,9 @@ def _on_fetch_failure(arn: str, e: Exception, refreshing: bool) -> None:
             "earthdata secret loads"
         )
         return
-    # nothing to fall back to: requests inside the window re-raise this
-    # error without fetching (see _in_backoff)
+    # No identity is available at all. Remember the error so that requests
+    # arriving during the backoff window raise it again without another
+    # fetch (see _in_backoff).
     msg = (
         "failed to load Earthdata Login credentials from the "
         "configured secret; see the service logs for details"
