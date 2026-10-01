@@ -35,32 +35,42 @@ from titiler.xarray.dependencies import (
 )
 
 from titiler.multidim.mosaic import XarrayMosaicBackend
-from titiler.multidim.reader import XarrayReader
-from titiler.multidim.settings import ApiSettings
-
-api_settings = ApiSettings()
+from titiler.multidim.reader import XarrayReader, api_settings
 
 
-def _normalize_url(url: str) -> str | None:
-    """Lowercase scheme and host; None if the path has `.`/`..` segments.
+def _normalize_url(url: str) -> str:
+    """Lowercase scheme and host and end the path with "/" for prefix matching.
 
-    Dot segments are rejected rather than resolved: S3 keeps them literally
-    while HTTP servers resolve them, so no single resolution is safe.
+    The trailing "/" makes prefixes match whole path segments: "s3://b/a/"
+    must not admit "s3://b/abc". "." and ".." segments raise ValueError rather
+    than being resolved: S3 keeps them literally while HTTP servers resolve
+    them, so no single resolution is safe.
     """
     parts = urlsplit(url)
-    if {".", ".."} & set(unquote(parts.path).split("/")):
-        return None
+    segments = unquote(parts.path).split("/")
+    if "." in segments or ".." in segments:
+        raise ValueError(f"'.' or '..' path segment in {url!r}")
     return urlunsplit(
-        parts._replace(scheme=parts.scheme.lower(), netloc=parts.netloc.lower())
+        parts._replace(
+            scheme=parts.scheme.lower(),
+            netloc=parts.netloc.lower(),
+            path=parts.path.rstrip("/") + "/",
+        )
     )
 
 
-# prefixes match whole path segments: "s3://b/a" must not admit "s3://b/abc"
-_allowed_prefixes = tuple(
-    n
-    for p in api_settings.allowed_url_prefixes
-    if (n := _normalize_url(p.rstrip("/") + "/"))
-)
+# a bad configured prefix raises here, failing startup instead of being dropped
+_allowed_prefixes = tuple(_normalize_url(p) for p in api_settings.allowed_url_prefixes)
+
+
+def _is_url_allowed(url: str) -> bool:
+    """True if no prefixes are configured or url lies under one of them."""
+    if not _allowed_prefixes:
+        return True
+    try:
+        return _normalize_url(url).startswith(_allowed_prefixes)
+    except ValueError:
+        return False
 
 
 def DatasetPathParams(
@@ -71,14 +81,12 @@ def DatasetPathParams(
     ),
 ) -> list[str]:
     """Return the ordered Xarray source URLs."""
-    if api_settings.allowed_url_prefixes:
-        for u in url:
-            n = _normalize_url(u)
-            if n is None or not (n + "/").startswith(_allowed_prefixes):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"url not permitted: {u.split('?', maxsplit=1)[0]}",
-                )
+    for u in url:
+        if not _is_url_allowed(u):
+            raise HTTPException(
+                status_code=400,
+                detail=f"url not permitted: {u.split('?', maxsplit=1)[0]}",
+            )
     return url
 
 

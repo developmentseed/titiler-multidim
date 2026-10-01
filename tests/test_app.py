@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 from urllib.parse import urlencode
@@ -480,3 +481,21 @@ def test_url_allowlist_ignores_scheme_and_host_case(allowlisted_app):
 
     urls = ["https://EXAMPLE.com/Data/store.zarr", "HTTPS://example.com/Data"]
     assert DatasetPathParams(url=urls) == urls
+
+
+def test_url_allowlist_matches_before_query_string(allowlisted_app):
+    from titiler.multidim.factory import DatasetPathParams
+
+    urls = ["https://example.com/Data?token=abc"]
+    assert DatasetPathParams(url=urls) == urls
+
+
+def test_url_allowlist_rejects_dot_segment_prefix(monkeypatch, request):
+    # a configured prefix that can't be matched safely fails startup rather
+    # than being dropped (which would silently reject every request)
+    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", "s3://bucket/a/../b")
+    with pytest.raises(ValueError, match="path segment"):
+        request.getfixturevalue("app")
+    # drop the half-imported modules so later imports see the restored env
+    for module in [m for m in sys.modules if m.startswith("titiler.multidim")]:
+        del sys.modules[module]
