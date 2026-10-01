@@ -25,35 +25,20 @@ POINT = (-95.0, 35.0)
 class CountingStore(WrapperStore[Store]):
     """Count `get` calls on the wrapped store.
 
-    zarr derives read-only copies through `_with_store`, so the count
-    lives in a shared cell rather than on one instance.
+    Wrap a read-only store: zarr then uses this instance as-is rather than
+    deriving a read-only copy, with its own count, through `_with_store`.
     """
 
-    def __init__(self, store: Store, cell: list[int] | None = None) -> None:
-        """Wrap `store`; `cell` is the shared one-element counter."""
-        super().__init__(store)
-        self._cell = cell if cell is not None else [0]
-
-    @property
-    def gets(self) -> int:
-        """Number of `get`/`get_sync` calls so far."""
-        return self._cell[0]
-
-    def reset(self) -> None:
-        """Zero the counter."""
-        self._cell[0] = 0
-
-    def _with_store(self, store: Store):
-        return type(self)(store, self._cell)
+    gets = 0
 
     async def get(self, key, prototype, byte_range=None):
         """Count, then delegate."""
-        self._cell[0] += 1
+        self.gets += 1
         return await self._store.get(key, prototype, byte_range=byte_range)
 
     def get_sync(self, key, prototype, byte_range=None):
         """Count, then delegate (zarr >= 3.2 sync read path)."""
-        self._cell[0] += 1
+        self.gets += 1
         return self._store.get_sync(key, prototype=prototype, byte_range=byte_range)
 
 
@@ -98,7 +83,7 @@ def latency(request) -> float:
 @pytest.fixture
 def counter(store_path, latency, monkeypatch) -> CountingStore:
     """Route the reader's opener through counting + latency store wrappers."""
-    counting = CountingStore(LocalStore(store_path))
+    counting = CountingStore(LocalStore(store_path, read_only=True))
     store: Store = LatencyStore(counting, get_latency=latency) if latency else counting
 
     def opener(src_path: str, **kwargs) -> xr.Dataset:
@@ -116,8 +101,9 @@ def _reader():
 
 def _record(benchmark, counter, fn):
     """Time `fn`; record the `get` count of one call as extra_info."""
-    counter.reset()
+    counter.gets = 0
     fn()
+    assert counter.gets, "gets went to a copy of the counting store"
     benchmark.extra_info["store_gets"] = counter.gets
     benchmark(fn)
 
