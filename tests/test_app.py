@@ -427,3 +427,39 @@ def test_errors_not_cacheable(app):
     healthz = app.get("/healthz")
     assert healthz.status_code == 200
     assert "cache-control" not in healthz.headers
+
+
+def test_landing(app):
+    response = app.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    body = response.json()
+    assert body["title"] == "titiler-multidim"
+    rels = {link["rel"] for link in body["links"]}
+    assert {"self", "service-desc", "service-doc"} <= rels
+    # every internal link resolves
+    for link in body["links"]:
+        if link["href"].startswith("http://testserver"):
+            assert app.get(link["href"]).status_code == 200, link["href"]
+
+    html = app.get("/", headers={"accept": "text/html"})
+    assert html.status_code == 200
+    assert "text/html" in html.headers["content-type"]
+    assert "/api.html" in html.text
+
+    assert app.get("/?f=html").headers["content-type"].startswith("text/html")
+
+
+def test_conformance(app):
+    response = app.get("/conformance")
+    assert response.status_code == 200
+    conforms_to = response.json()["conformsTo"]
+    assert (
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page"
+        in conforms_to
+    )
+    assert "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core" in conforms_to
+
+    html = app.get("/conformance?f=html")
+    assert html.status_code == 200
+    assert "text/html" in html.headers["content-type"]
