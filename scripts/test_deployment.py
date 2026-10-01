@@ -68,6 +68,21 @@ TEST_CASES = (
             "decode_times": "true",
         },
     ),
+    (
+        # exercises the where= masking path end to end in the deployed
+        # bundle, so a regression fails here instead of 500ing user requests
+        "MUR SST zarr with where= mask",
+        "5/8/13",
+        {
+            "url": "s3://mur-sst/zarr-v1",
+            "variable": "analysed_sst",
+            "colormap_name": "thermal",
+            "rescale": "273,325",
+            "sel": "time=nearest::2002-07-05T00:00:00Z",
+            "decode_times": "true",
+            "where": "analysed_sst>=271.15",
+        },
+    ),
 )
 
 

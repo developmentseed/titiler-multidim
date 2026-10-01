@@ -1,5 +1,7 @@
 """Reader tests."""
 
+from unittest import mock
+
 import icechunk
 import numpy as np
 import obstore
@@ -129,3 +131,211 @@ def test_opener_icechunk_skips_earthdata_for_undeclared_containers(monkeypatch):
     }
     reader.opener_icechunk("file:///tmp/repo", authorize_virtual_chunk_access=access)
     assert primed == []
+
+
+def test_zarr_opens_unchunked(tmp_path):
+    """opener_zarr pins chunks=None so variables stay on xarray's
+    lazy-indexing layer (no chunk manager, no per-request graph
+    overhead), which is also what `where=` masking builds on."""
+    path = str(tmp_path / "store.zarr")
+    xr.Dataset({"data": (("y", "x"), np.zeros((4, 4)))}).to_zarr(
+        path, consolidated=False
+    )
+    with reader.guess_opener(path) as ds:
+        assert ds["data"].chunks is None
+
+
+class TestApplyWhere:
+    """Behavior of the `where` masking at the reader level."""
+
+    @pytest.fixture
+    def store(self, tmp_path_factory):
+        """A zarr store with 3D data, a 2D mask, and a 1D variable."""
+        rng = np.random.default_rng(42)
+        lat = np.linspace(-85.0, 85.0, 18)
+        lon = np.linspace(-175.0, 175.0, 36)
+        flag = np.zeros((18, 36))
+        flag[0, 0] = np.nan
+        flag[0, 1] = 1.0
+        ds = xr.Dataset(
+            {
+                "data": (("time", "lat", "lon"), rng.random((4, 18, 36))),
+                "mask2d": (("lat", "lon"), rng.random((18, 36))),
+                "line": (("time",), np.arange(4.0)),
+                # same grid shape, offset by 0.1 deg: get_variable renames
+                # latitude/longitude to y/x too, so only coordinate values
+                # distinguish it from the data's grid
+                "offgrid": (("latitude", "longitude"), rng.random((18, 36))),
+                # 0 = good, 1 = bad, NaN at [0, 0] = no retrieval (fill)
+                "flag": (("lat", "lon"), flag),
+            },
+            coords={
+                "time": np.arange(4),
+                "lat": lat,
+                "lon": lon,
+                "latitude": lat + 0.1,
+                "longitude": lon + 0.1,
+            },
+        )
+        path = str(tmp_path_factory.mktemp("where") / "store.zarr")
+        # on-disk chunks via encoding (ds.chunk() would need dask)
+        chunks = {
+            "data": (1, 9, 9),
+            "mask2d": (9, 9),
+            "offgrid": (9, 9),
+            "flag": (9, 9),
+            "line": (1,),
+        }
+        ds.to_zarr(
+            path,
+            consolidated=False,
+            encoding={name: {"chunks": c} for name, c in chunks.items()},
+        )
+        return path
+
+    def _reader(self, store, **kwargs):
+        return reader.XarrayReader(
+            src_path=store,
+            variable="data",
+            decode_times=False,
+            sel=["time=0"],
+            **kwargs,
+        )
+
+    def test_non_spatial_condition_variable_is_a_400(self, store):
+        """A 0/1-D condition variable must raise BadRequestError, not ValueError."""
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="line"):
+            self._reader(store, where=["line>0"])
+
+    def test_mask_without_selector_dims_is_accepted(self, store):
+        """A (lat, lon) mask must work even when the request selects on time."""
+        with self._reader(store, where=["mask2d>=0"]) as src:
+            assert src.point(0, 0).array[0] is not np.ma.masked
+
+    def test_dataset_closed_when_where_is_invalid(self, store, monkeypatch):
+        """A 400 raised by _apply_where must not leak the opened dataset."""
+        from titiler.core.errors import BadRequestError
+
+        closed = []
+        real_opener = reader.guess_opener
+
+        def spy_opener(*args, **kwargs):
+            ds = real_opener(*args, **kwargs)
+            real_close = ds._close
+            ds.set_close(lambda: (closed.append(True), real_close and real_close()))
+            return ds
+
+        monkeypatch.setattr(reader, "guess_opener", spy_opener)
+        with pytest.raises(BadRequestError):
+            self._reader(store, where=["nope==1"])
+        assert closed == [True]
+
+    def test_invalid_syntax_is_a_400_before_the_store_is_opened(
+        self, store, monkeypatch
+    ):
+        """A malformed condition must 400 without any I/O."""
+        from titiler.core.errors import BadRequestError
+
+        opener = mock.Mock(wraps=reader.guess_opener)
+        monkeypatch.setattr(reader, "guess_opener", opener)
+
+        with pytest.raises(BadRequestError, match="expected"):
+            self._reader(store, where=["data=1"])
+
+        opener.assert_not_called()
+
+    def test_where_masking_stays_lazy(self, store):
+        """Masking must not materialize the full slice at reader construction."""
+        with self._reader(store, where=["mask2d>=0.5"]) as src:
+            assert not src.input._in_memory
+
+    def test_mask_on_mismatched_grid_is_a_400(self, store):
+        """A mask whose coordinates differ from the data's must 400 —
+        .where() would align with join='inner' and silently shrink or
+        empty the data while bounds/transform go stale."""
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="offgrid"):
+            self._reader(store, where=["offgrid>=0"])
+
+    def test_where_preserves_encoding(self, store):
+        """.where() returns a bare array; losing encoding would turn
+        rio.nodata (from encoding['_FillValue']) into None whenever a
+        where= filter is present."""
+
+        def encodings_equal(enc1, enc2):
+            """Compare encodings, treating NaN values as equal."""
+            if enc1.keys() != enc2.keys():
+                return False
+            for key in enc1.keys():
+                v1, v2 = enc1[key], enc2[key]
+                # Handle NaN values specially (NaN != NaN in Python)
+                if isinstance(v1, float) and isinstance(v2, float):
+                    if np.isnan(v1) and np.isnan(v2):
+                        continue
+                if v1 != v2:
+                    return False
+            return True
+
+        with (
+            self._reader(store) as plain,
+            self._reader(store, where=["mask2d>=0"]) as masked,
+        ):
+            assert plain.input.encoding  # fixture must actually carry encoding
+            assert encodings_equal(masked.input.encoding, plain.input.encoding)
+
+    def test_fill_in_condition_variable_fails_the_filter(self, store):
+        """NaN != 1 is True, so without a notnull guard a no-retrieval
+        pixel passes `flag!=1` while failing the equivalent `flag==0`."""
+        with self._reader(store, where=["flag!=1"]) as src:
+            # [0, 0] is lat=-85, lon=-175, where flag is NaN (fill)
+            assert src.point(-175.0, -85.0).array[0] is np.ma.masked
+
+    def test_part_reads_only_the_window(self, store, monkeypatch):
+        """Masking must stay inside xarray's lazy-indexing layer: a part()
+        read materializes the clipped window of the data and the mask, not
+        the full slice (18x36 here)."""
+        shapes = []
+        read_window = reader._MaskedArray._read_window
+
+        def spy(self, key):
+            out = read_window(self, key)
+            shapes.append(out.shape)
+            return out
+
+        monkeypatch.setattr(reader._MaskedArray, "_read_window", spy)
+        with self._reader(store, where=["mask2d>=0.5"]) as src:
+            assert not src.input._in_memory
+            img = src.part((-30.0, -30.0, 30.0, 30.0), width=8, height=8)
+        assert img.array.shape == (1, 8, 8)
+        assert shapes and all(shape < (18, 36) for shape in shapes), shapes
+
+    def test_mask_applies_before_reprojection(self, store):
+        """With bilinear resampling, masked pixels must be NaN before the
+        warp (excluded from the kernel), matching an eager .where() of the
+        same slice: masking after the warp would bleed masked neighbours."""
+        bbox = (-100.0, -50.0, 100.0, 50.0)
+        kwargs = {"width": 40, "height": 20, "reproject_method": "bilinear"}
+        with self._reader(store, where=["mask2d>=0.5", "flag==0"]) as src:
+            img = src.part(bbox, **kwargs)
+            ds = src.ds
+            eager = src.input.copy(data=src.input.values)  # forces the lazy mask
+        assert img.array.dtype == np.float64  # data is float64, no upcast
+        reference = (
+            ds["data"]
+            .isel(time=0)
+            .where((ds["mask2d"] >= 0.5) & (ds["flag"] == 0) & ds["flag"].notnull())
+            .rename({"lat": "y", "lon": "x"})
+            .rio.write_crs("epsg:4326")
+        )
+        np.testing.assert_array_equal(eager.values, reference.values)
+        from rio_tiler.io import XarrayReader as RioXarrayReader
+
+        # `eager` keeps the input's encoding (nodata), which the warp uses to
+        # exclude masked source pixels from the bilinear kernel
+        with RioXarrayReader(input=eager) as ref:
+            expected = ref.part(bbox, **kwargs)
+        np.testing.assert_array_equal(img.array.mask, expected.array.mask)
+        np.testing.assert_allclose(img.array.filled(0), expected.array.filled(0))
