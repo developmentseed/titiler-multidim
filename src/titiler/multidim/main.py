@@ -4,6 +4,7 @@ import logging
 import os
 
 import icechunk
+import numcodecs.registry
 import zarr
 from earthaccess_auth.exceptions import (
     LoginAttemptFailure,
@@ -28,6 +29,10 @@ from titiler.multidim import __version__ as titiler_version
 from titiler.multidim.extensions import open_metadata_dataset
 from titiler.multidim.factory import XarrayMosaicTilerFactory
 from titiler.multidim.settings import ApiSettings
+
+# zarr v2 metadata resolves codecs through the numcodecs registry; a remote
+# store must not be able to make the service unpickle its chunks
+numcodecs.registry.codec_registry.pop("pickle", None)
 
 logging.getLogger("botocore.credentials").disabled = True
 logging.getLogger("botocore.utils").disabled = True

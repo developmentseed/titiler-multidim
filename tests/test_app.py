@@ -427,3 +427,11 @@ def test_errors_not_cacheable(app):
     healthz = app.get("/healthz")
     assert healthz.status_code == 200
     assert "cache-control" not in healthz.headers
+
+
+def test_pickle_codec_unavailable(app):
+    # zarr v2 metadata resolves codecs through the numcodecs registry; a
+    # remote store must not be able to make the service unpickle its chunks
+    import numcodecs.registry
+
+    assert "pickle" not in numcodecs.registry.codec_registry
