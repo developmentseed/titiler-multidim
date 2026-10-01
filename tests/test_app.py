@@ -499,3 +499,15 @@ def test_url_allowlist_rejects_dot_segment_prefix(monkeypatch, request):
     # drop the half-imported modules so later imports see the restored env
     for module in [m for m in sys.modules if m.startswith("titiler.multidim")]:
         del sys.modules[module]
+
+
+@pytest.mark.parametrize("prefix", [DATA_DIR, f"file://{os.path.abspath(DATA_DIR)}"])
+@pytest.mark.parametrize(
+    "url", [test_zarr_store_v2, f"file://{os.path.abspath(test_zarr_store_v2)}"]
+)
+def test_url_allowlist_bare_paths_match_file_urls(monkeypatch, request, prefix, url):
+    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", prefix)
+    request.getfixturevalue("app")
+    from titiler.multidim.factory import DatasetPathParams
+
+    assert DatasetPathParams(url=[url]) == [url]

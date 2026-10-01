@@ -1,5 +1,6 @@
 """TiTiler Xarray mosaic factory."""
 
+import os
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 from urllib.parse import unquote, urlencode, urlsplit, urlunsplit
@@ -44,12 +45,15 @@ def _normalize_url(url: str) -> str:
     The trailing "/" makes prefixes match whole path segments: "s3://b/a/"
     must not admit "s3://b/abc". "." and ".." segments raise ValueError rather
     than being resolved: S3 keeps them literally while HTTP servers resolve
-    them, so no single resolution is safe.
+    them, so no single resolution is safe. Bare (and relative) paths become
+    absolute file:// urls, so "/data/x" and "file:///data/x" match alike.
     """
     parts = urlsplit(url)
     segments = unquote(parts.path).split("/")
     if "." in segments or ".." in segments:
         raise ValueError(f"'.' or '..' path segment in {url!r}")
+    if not parts.scheme:
+        parts = urlsplit(f"file://{os.path.abspath(url)}")
     return urlunsplit(
         parts._replace(
             scheme=parts.scheme.lower(),
