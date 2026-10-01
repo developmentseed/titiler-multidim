@@ -22,7 +22,9 @@ class ApiSettings(BaseSettings):
     telemetry_enabled: bool = False
     authorized_chunk_access: dict[str, AnyChunkAccess] = {}
     earthdata_secret_arn: str | None = None
-    # comma-separated url prefixes datasets may be opened from; empty = any
+    # comma-separated directory prefixes datasets may be opened from; empty =
+    # any. Each matches whole path segments (a trailing "/" is implied), scheme
+    # and host case-insensitively; urls with "." or ".." segments are refused
     allowed_url_prefixes: str = ""
 
     model_config = SettingsConfigDict(

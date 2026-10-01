@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode, urlsplit, urlunsplit
 
 import jinja2
 import numpy as np
@@ -41,6 +41,28 @@ from titiler.multidim.settings import ApiSettings
 api_settings = ApiSettings()
 
 
+def _normalize_url(url: str) -> str | None:
+    """Lowercase scheme and host; None if the path has `.`/`..` segments.
+
+    Dot segments are rejected rather than resolved: S3 keeps them literally
+    while HTTP servers resolve them, so no single resolution is safe.
+    """
+    parts = urlsplit(url)
+    if {".", ".."} & set(unquote(parts.path).split("/")):
+        return None
+    return urlunsplit(
+        parts._replace(scheme=parts.scheme.lower(), netloc=parts.netloc.lower())
+    )
+
+
+# prefixes match whole path segments: "s3://b/a" must not admit "s3://b/abc"
+_allowed_prefixes = tuple(
+    n
+    for p in api_settings.allowed_url_prefixes
+    if (n := _normalize_url(p.rstrip("/") + "/"))
+)
+
+
 def DatasetPathParams(
     url: list[str] = Query(
         min_length=1,
@@ -49,10 +71,10 @@ def DatasetPathParams(
     ),
 ) -> list[str]:
     """Return the ordered Xarray source URLs."""
-    allowed = api_settings.allowed_url_prefixes
-    if allowed:
+    if api_settings.allowed_url_prefixes:
         for u in url:
-            if not u.startswith(tuple(allowed)):
+            n = _normalize_url(u)
+            if n is None or not (n + "/").startswith(_allowed_prefixes):
                 raise HTTPException(
                     status_code=400,
                     detail=f"url not permitted: {u.split('?', maxsplit=1)[0]}",

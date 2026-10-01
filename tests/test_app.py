@@ -431,8 +431,11 @@ def test_errors_not_cacheable(app):
 
 @pytest.fixture
 def allowlisted_app(monkeypatch, request):
-    """App restricted to the local fixtures directory."""
-    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", f"{DATA_DIR}/")
+    """App restricted to the local fixtures directory and one https prefix."""
+    # no trailing slashes and a mixed-case host, to exercise normalisation
+    monkeypatch.setenv(
+        "TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", f"{DATA_DIR},HTTPS://Example.com/Data"
+    )
     return request.getfixturevalue("app")
 
 
@@ -451,3 +454,29 @@ def test_url_outside_allowlist_rejected(allowlisted_app):
 def test_url_inside_allowlist_served(allowlisted_app):
     response = allowlisted_app.get("/variables", params={"url": test_zarr_store_v2})
     assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"{DATA_DIR}_other/store.zarr",  # shares the prefix string, not the directory
+        f"{DATA_DIR}/../store.zarr",
+        f"{DATA_DIR}/%2e%2e/store.zarr",
+        f"{DATA_DIR}/./store.zarr",
+        "https://example.com/DataX/store.zarr",
+        "https://example.com/Data/../store.zarr",
+        "https://example.com@evil.com/Data/store.zarr",
+        "https://example.com/data/store.zarr",  # paths stay case-sensitive
+    ],
+)
+def test_url_allowlist_rejects_escapes(allowlisted_app, url):
+    response = allowlisted_app.get("/variables", params={"url": url})
+    assert response.status_code == 400
+    assert "url not permitted" in response.json()["detail"]
+
+
+def test_url_allowlist_ignores_scheme_and_host_case(allowlisted_app):
+    from titiler.multidim.factory import DatasetPathParams
+
+    urls = ["https://EXAMPLE.com/Data/store.zarr", "HTTPS://example.com/Data"]
+    assert DatasetPathParams(url=urls) == urls
