@@ -427,3 +427,27 @@ def test_errors_not_cacheable(app):
     healthz = app.get("/healthz")
     assert healthz.status_code == 200
     assert "cache-control" not in healthz.headers
+
+
+@pytest.fixture
+def allowlisted_app(monkeypatch, request):
+    """App restricted to the local fixtures directory."""
+    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", f"{DATA_DIR}/")
+    return request.getfixturevalue("app")
+
+
+def test_url_outside_allowlist_rejected(allowlisted_app):
+    # one disallowed url in a mosaic list rejects the whole request, and the
+    # query string of the offending url is not echoed back
+    response = allowlisted_app.get(
+        "/variables",
+        params={"url": [test_zarr_store_v2, "s3://not-ours/store.zarr?token=abc"]},
+    )
+    assert response.status_code == 400
+    assert "s3://not-ours/store.zarr" in response.json()["detail"]
+    assert "token=abc" not in response.text
+
+
+def test_url_inside_allowlist_served(allowlisted_app):
+    response = allowlisted_app.get("/variables", params={"url": test_zarr_store_v2})
+    assert response.status_code == 200

@@ -22,10 +22,17 @@ class ApiSettings(BaseSettings):
     telemetry_enabled: bool = False
     authorized_chunk_access: dict[str, AnyChunkAccess] = {}
     earthdata_secret_arn: str | None = None
+    # comma-separated url prefixes datasets may be opened from; empty = any
+    allowed_url_prefixes: str = ""
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_MULTIDIM_", env_file=".env", extra="ignore"
     )
+
+    @field_validator("allowed_url_prefixes")
+    def parse_allowed_url_prefixes(cls, v):
+        """Parse allowed url prefixes."""
+        return [p.strip() for p in v.split(",") if p.strip()]
 
     @field_validator("cors_origins")
     def parse_cors_origin(cls, v):

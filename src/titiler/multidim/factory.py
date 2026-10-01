@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 import jinja2
 import numpy as np
 from attrs import define
-from fastapi import Depends, Path, Query
+from fastapi import Depends, HTTPException, Path, Query
 from geojson_pydantic.features import Feature
 from rio_tiler.constants import WGS84_CRS
 from rio_tiler.models import Info
@@ -36,6 +36,9 @@ from titiler.xarray.dependencies import (
 
 from titiler.multidim.mosaic import XarrayMosaicBackend
 from titiler.multidim.reader import XarrayReader
+from titiler.multidim.settings import ApiSettings
+
+api_settings = ApiSettings()
 
 
 def DatasetPathParams(
@@ -46,6 +49,14 @@ def DatasetPathParams(
     ),
 ) -> list[str]:
     """Return the ordered Xarray source URLs."""
+    allowed = api_settings.allowed_url_prefixes
+    if allowed:
+        for u in url:
+            if not u.startswith(tuple(allowed)):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"url not permitted: {u.split('?', maxsplit=1)[0]}",
+                )
     return url
 
 
