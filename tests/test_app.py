@@ -484,6 +484,8 @@ class TestWhereParameter:
         response = app.get("/point/10,10", params={**self.params, "where": [condition]})
         assert response.status_code == 400
         assert detail in response.json()["detail"]
+
+
 @pytest.fixture
 def allowlisted_app(monkeypatch, request):
     """App restricted to the local fixtures directory and one https prefix."""
