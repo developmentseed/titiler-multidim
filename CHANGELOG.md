@@ -4,6 +4,20 @@
 
 * nothing
 
+## [0.10.0](https://github.com/developmentseed/titiler-multidim/compare/v0.9.1...v0.10.0) (2026-10-02)
+
+
+### Features
+
+* add OGC landing page at / and /conformance ([#170](https://github.com/developmentseed/titiler-multidim/issues/170)) ([3bd2832](https://github.com/developmentseed/titiler-multidim/commit/3bd2832f7916e88c387c3ce649cd709f86ca96c5))
+* restrict dataset urls to configured prefixes ([#169](https://github.com/developmentseed/titiler-multidim/issues/169)) ([bcdbd1a](https://github.com/developmentseed/titiler-multidim/commit/bcdbd1a64220c2d01fe54d91e4cefc0d6e8b19fe))
+
+
+### Bug Fixes
+
+* distinguish between wrong and no earthdata credentials ([#162](https://github.com/developmentseed/titiler-multidim/issues/162)) ([1a78ff8](https://github.com/developmentseed/titiler-multidim/commit/1a78ff8941fb3fa1d5a348f8e339a124a15bed18))
+* reject virtual chunk prefixes without a trailing slash ([#163](https://github.com/developmentseed/titiler-multidim/issues/163)) ([3e72bf2](https://github.com/developmentseed/titiler-multidim/commit/3e72bf29d8e8d300bbbf26dc4a4f33123e1feb74))
+
 ## [0.9.1](https://github.com/developmentseed/titiler-multidim/compare/v0.9.0...v0.9.1) (2026-09-22)
 
 
