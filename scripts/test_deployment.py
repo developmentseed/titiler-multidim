@@ -49,7 +49,7 @@ TEST_CASES = (
         "virtual TEMPO HCHO Icechunk (earthdata auth)",
         "4/3/6",
         {
-            "url": "s3://airquality-data-store-develop/tempo/hcho/v04-trial",
+            "url": "s3://airquality-data-store-develop/tempo/hcho/v04",
             "variable": "vertical_column",
             "sel": "time=nearest::2026-08-24T15:40:44",
             "rescale": "0,1.5e16",
@@ -66,6 +66,21 @@ TEST_CASES = (
             "rescale": "273,325",
             "sel": "time=nearest::2002-07-05T00:00:00Z",
             "decode_times": "true",
+        },
+    ),
+    (
+        # exercises the where= masking path end to end in the deployed
+        # bundle, so a regression fails here instead of 500ing user requests
+        "MUR SST zarr with where= mask",
+        "5/8/13",
+        {
+            "url": "s3://mur-sst/zarr-v1",
+            "variable": "analysed_sst",
+            "colormap_name": "thermal",
+            "rescale": "273,325",
+            "sel": "time=nearest::2002-07-05T00:00:00Z",
+            "decode_times": "true",
+            "where": "analysed_sst>=271.15",
         },
     ),
 )
