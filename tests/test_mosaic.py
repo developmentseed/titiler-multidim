@@ -388,3 +388,15 @@ def test_backend_closes_readers_when_validation_fails(sources, tmp_path, reader_
             reader_options={"variable": "data"},
         )
     assert sorted(closed) == sorted([str(left), str(incompatible)])
+
+
+def test_info_show_times_opens_dataset_once(app, opens, sources):
+    """Listing times reuses the reader opened for info."""
+    _, _, first, _ = sources
+    response = app.get(
+        "/info", params={"url": str(first), "variable": "data", "show_times": "true"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["times"] == ["0"]
+    assert opens == [str(first)]
