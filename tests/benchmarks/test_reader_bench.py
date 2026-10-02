@@ -14,7 +14,7 @@ from zarr.abc.store import Store
 from zarr.storage import LocalStore, WrapperStore
 from zarr.testing.store import LatencyStore
 
-from titiler.multidim import reader
+from titiler.multidim import mosaic, reader
 
 LATENCIES = (0.0, 0.03)
 # WebMercatorQuad z/x/y inside the fixture's bounds
@@ -133,6 +133,35 @@ def test_point(benchmark, counter):
 
     def run():
         with _reader() as src:
+            return src.point(*POINT)
+
+    _record(benchmark, counter, run)
+
+
+def _backend():
+    """Single-URL request path: the backend validates, then rio-tiler reads."""
+    return mosaic.XarrayMosaicBackend(
+        ["bench://store"],
+        reader=reader.XarrayReader,
+        reader_options={"variable": "data", "sel": ["time=0"]},
+    )
+
+
+def test_backend_tile(benchmark, counter):
+    """Open through XarrayMosaicBackend + one z3 tile, as /tiles does."""
+
+    def run():
+        with _backend() as src:
+            return src.tile(TILE[1], TILE[2], TILE[0])
+
+    _record(benchmark, counter, run)
+
+
+def test_backend_point(benchmark, counter):
+    """Open through XarrayMosaicBackend + one point read, as /point does."""
+
+    def run():
+        with _backend() as src:
             return src.point(*POINT)
 
     _record(benchmark, counter, run)
