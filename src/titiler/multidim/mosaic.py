@@ -1,5 +1,6 @@
 """Request-scoped Xarray mosaic backend."""
 
+import contextlib
 from typing import Any
 
 import attr
@@ -21,40 +22,68 @@ class XarrayMosaicBackend(BaseBackend):
 
     _asset_bounds: list[BBox] = attr.ib(init=False, factory=list)
     _asset_info: list[dict[str, Any]] = attr.ib(init=False, factory=list)
+    _readers: dict[str, Any] = attr.ib(init=False, factory=dict)
 
     def __attrs_post_init__(self) -> None:
-        """Validate every requested source and collect its geographic metadata."""
+        """Open and validate every source, keeping its reader for the request."""
         if not 1 <= len(self.input) <= 20:
             raise BadRequestError("Provide between one and twenty url parameters.")
 
+        try:
+            self._open_sources()
+        except BaseException:
+            self.close()
+            raise
+
+        # rio-tiler's read paths (tile, part, feature, point) open each asset
+        # with `with self.reader(asset, ...)`. Hand back the reader opened
+        # above instead, so a request opens each dataset once; nullcontext
+        # keeps those `with` blocks from closing it before close().
+        self.reader = lambda asset, **_: contextlib.nullcontext(self._readers[asset])  # type: ignore[assignment]
+
+    def _open_sources(self) -> None:
+        """Open each distinct source once and reject incompatible ones."""
         signature: tuple[Any, ...] | None = None
         zooms: list[tuple[int, int]] = []
         for asset in self.input:
-            with self.reader(asset, tms=self.tms, **self.reader_options) as src:
-                info = src.info().model_dump()
-                current = (
-                    str(src.input.dtype),
-                    src.input.rio.count,
-                    tuple(
-                        dimension
-                        for dimension in src.input.dims
-                        if dimension not in {src.input.rio.x_dim, src.input.rio.y_dim}
-                    ),
-                    repr(info["band_metadata"]),
-                    info["nodata_type"],
+            if asset not in self._readers:
+                self._readers[asset] = self.reader(
+                    asset, tms=self.tms, **self.reader_options
                 )
-                if signature is not None and current != signature:
-                    raise BadRequestError("Requested Xarray sources are incompatible.")
+            src = self._readers[asset]
+            info = src.info().model_dump()
+            current = (
+                str(src.input.dtype),
+                src.input.rio.count,
+                tuple(
+                    dimension
+                    for dimension in src.input.dims
+                    if dimension not in {src.input.rio.x_dim, src.input.rio.y_dim}
+                ),
+                repr(info["band_metadata"]),
+                info["nodata_type"],
+            )
+            if signature is not None and current != signature:
+                raise BadRequestError("Requested Xarray sources are incompatible.")
 
-                signature = current
-                self._asset_bounds.append(src.get_geographic_bounds(WGS84_CRS))
-                self._asset_info.append(info)
-                zooms.append((src.minzoom, src.maxzoom))
+            signature = current
+            self._asset_bounds.append(src.get_geographic_bounds(WGS84_CRS))
+            self._asset_info.append(info)
+            zooms.append((src.minzoom, src.maxzoom))
 
         self.crs = WGS84_CRS
         self.bounds = self._mosaic_bounds()
         self.minzoom = min(zoom[0] for zoom in zooms)
         self.maxzoom = max(zoom[1] for zoom in zooms)
+
+    def close(self) -> None:
+        """Close every reader this backend opened."""
+        for src in self._readers.values():
+            src.close()
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Close the readers when the request's `with` block ends."""
+        self.close()
 
     def info(self) -> dict[str, Any]:
         """Return native metadata for one source or shared metadata for a mosaic."""
