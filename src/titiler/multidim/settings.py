@@ -2,10 +2,10 @@
 
 import json
 from getpass import getuser
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from titiler.multidim.chunk_access import AnyChunkAccess, parse_chunk_access
 
@@ -22,10 +22,20 @@ class ApiSettings(BaseSettings):
     telemetry_enabled: bool = False
     authorized_chunk_access: dict[str, AnyChunkAccess] = {}
     earthdata_secret_arn: str | None = None
+    # comma-separated directory prefixes datasets may be opened from; empty =
+    # any. Matching rules live in factory.DatasetPathParams
+    allowed_url_prefixes: Annotated[list[str], NoDecode] = []
 
     model_config = SettingsConfigDict(
         env_prefix="TITILER_MULTIDIM_", env_file=".env", extra="ignore"
     )
+
+    @field_validator("allowed_url_prefixes", mode="before")
+    def parse_allowed_url_prefixes(cls, v):
+        """Parse allowed url prefixes from a comma-separated string."""
+        if isinstance(v, str):
+            v = v.split(",")
+        return [p.strip() for p in v if p.strip()]
 
     @field_validator("cors_origins")
     def parse_cors_origin(cls, v):
