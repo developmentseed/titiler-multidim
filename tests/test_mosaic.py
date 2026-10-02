@@ -19,6 +19,26 @@ def reader_cls():
     return reader.XarrayReader
 
 
+@pytest.fixture
+def opens(monkeypatch):
+    """Record every dataset open made through the reader's opener.
+
+    Request it after ``app`` in a test signature: the ``app`` fixture
+    re-imports ``titiler.multidim`` and would discard an earlier patch.
+    """
+    from titiler.multidim import reader
+
+    calls = []
+    original = reader.guess_opener
+
+    def counting(src_path, **kwargs):
+        calls.append(src_path)
+        return original(src_path, **kwargs)
+
+    monkeypatch.setattr(reader, "guess_opener", counting)
+    return calls
+
+
 def write_dataset(path, value, *, x=(-5.0, 5.0), times=None, extra_variable=False):
     """Write a small geographic NetCDF dataset with a known value."""
     times = times or [0]
@@ -274,3 +294,109 @@ def test_histogram_supports_antimeridian_sources(app, tmp_path):
     assert sum(bucket["value"] for bucket in histogram) > 0
     assert histogram[0]["bucket"][0] == 0.5
     assert histogram[-1]["bucket"][1] == 1.5
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/tiles/WebMercatorQuad/0/0/0.png",
+        "/tiles/WGS1984Quad/0/0/0.png",
+        "/point/0,0",
+        "/bbox/-10,-10,10,10.png",
+    ],
+)
+def test_single_source_routes_open_dataset_once(app, opens, sources, route):
+    """A single-URL read opens its dataset once, not again after validation."""
+    _, _, first, _ = sources
+    response = app.get(route, params={"url": str(first), "variable": "data"})
+
+    assert response.status_code == 200
+    assert opens == [str(first)]
+
+
+def test_mosaic_tile_opens_each_source_once(app, opens, sources):
+    """A multi-URL tile opens every source exactly once."""
+    _, _, first, second = sources
+    response = app.get(
+        "/tiles/WebMercatorQuad/0/0/0.png",
+        params=[("url", str(first)), ("url", str(second)), ("variable", "data")],
+    )
+
+    assert response.status_code == 200
+    assert sorted(opens) == sorted([str(first), str(second)])
+
+
+def test_backend_opens_duplicate_urls_once(opens, sources, reader_cls):
+    """Repeating a URL reuses its reader instead of opening it again."""
+    _, _, first, _ = sources
+    with XarrayMosaicBackend(
+        [str(first), str(first)], reader=reader_cls, reader_options={"variable": "data"}
+    ) as backend:
+        point, _ = backend.point(0, 0)
+
+    assert point.array.tolist() == [1.0]
+    assert opens == [str(first)]
+
+
+def _recording(reader_cls, closed):
+    """Return a reader subclass that records which sources were closed."""
+
+    class Recording(reader_cls):
+        def close(self):
+            closed.append(self.src_path)
+            super().close()
+
+    return Recording
+
+
+def test_backend_closes_readers_on_exit(sources, reader_cls):
+    """Readers stay open across reads and close when the backend exits."""
+    _, _, first, second = sources
+    closed = []
+    with XarrayMosaicBackend(
+        [str(first), str(second)],
+        reader=_recording(reader_cls, closed),
+        reader_options={"variable": "data"},
+    ) as backend:
+        backend.point(0, 0)
+        backend.tile(0, 0, 0)
+        assert closed == []
+
+    assert sorted(closed) == sorted([str(first), str(second)])
+
+
+def test_backend_closes_readers_when_validation_fails(sources, tmp_path, reader_cls):
+    """Readers opened before a validation failure are closed, and it still raises."""
+    left, _, _, _ = sources
+    incompatible = tmp_path / "incompatible.nc"
+    write_dataset(incompatible, 2, times=[0, 1])
+
+    closed = []
+    with pytest.raises(GenericError):
+        XarrayMosaicBackend(
+            [str(left), str(tmp_path / "missing.nc")],
+            reader=_recording(reader_cls, closed),
+            reader_options={"variable": "data"},
+        )
+    assert closed == [str(left)]
+
+    closed.clear()
+    with pytest.raises(BadRequestError):
+        XarrayMosaicBackend(
+            [str(left), str(incompatible)],
+            reader=_recording(reader_cls, closed),
+            reader_options={"variable": "data"},
+        )
+    assert sorted(closed) == sorted([str(left), str(incompatible)])
+
+
+def test_info_show_times_opens_dataset_once(app, opens, sources):
+    """Listing times reuses the reader opened for info."""
+    _, _, first, _ = sources
+    response = app.get(
+        "/info", params={"url": str(first), "variable": "data", "show_times": "true"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["times"] == ["0"]
+    assert opens == [str(first)]
