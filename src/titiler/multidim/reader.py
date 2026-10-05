@@ -287,7 +287,7 @@ class WhereCondition:
 
     raw: str  # the original string, for error messages
     variable: str
-    op: str
+    predicate: Callable[[np.ndarray, float], np.ndarray]
     value: float
 
 
@@ -312,7 +312,7 @@ def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
                 WhereCondition(
                     raw=condition,
                     variable=match["variable"],
-                    op=match["op"],
+                    predicate=_WHERE_PREDICATE_BY_OP[match["op"]],
                     value=float(match["value"]),
                 )
             )
@@ -381,8 +381,7 @@ class _MaskedArray(BackendArray):
             keep &= ~np.isnan(values)
 
             for condition in conditions:
-                predicate = _WHERE_PREDICATE_BY_OP[condition.op]
-                keep &= predicate(values, condition.value)
+                keep &= condition.predicate(values, condition.value)
         return np.where(keep, window, np.nan).astype(self.dtype, copy=False)
 
 
