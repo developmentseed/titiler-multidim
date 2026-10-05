@@ -160,6 +160,8 @@ class TestApplyWhere:
                 "data": (("time", "lat", "lon"), rng.random((4, 18, 36))),
                 "mask2d": (("lat", "lon"), rng.random((18, 36))),
                 "line": (("time",), np.arange(4.0)),
+                # strings, which no numeric condition can compare against
+                "label": (("lat", "lon"), np.full((18, 36), "ok")),
                 # same grid shape, offset by 0.1 deg: get_variable renames
                 # latitude/longitude to y/x too, so only coordinate values
                 # distinguish it from the data's grid
@@ -209,6 +211,15 @@ class TestApplyWhere:
 
         with pytest.raises(BadRequestError, match="line"):
             self._reader(store, where=["line>0"])
+
+    def test_non_numeric_condition_variable_is_a_400(self, store):
+        """A non-numeric condition variable must fail at construction, not on
+        the first read."""
+
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="not numeric"):
+            self._reader(store, where=["label==1"])
 
     def test_mask_without_selector_dims_is_accepted(self, store):
         """A (lat, lon) mask must work even when the request selects on time."""

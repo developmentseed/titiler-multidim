@@ -486,6 +486,12 @@ class XarrayReader(Reader):
                     f"Invalid where condition {condition.raw!r}: {name!r} "
                     f"coordinates do not match {self.variable!r}'s"
                 ) from e
+
+            if da.dtype.kind not in "biuf":
+                raise BadRequestError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} is "
+                    f"not numeric (dtype {da.dtype})"
+                )
             arrays[name] = da
         masks = [(arrays[variable], group) for variable, group in groups.items()]
         # copy(data=...) keeps coords, attrs and encoding (hence rio.nodata
