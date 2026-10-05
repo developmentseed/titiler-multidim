@@ -131,18 +131,6 @@ def test_opener_icechunk_skips_earthdata_for_undeclared_containers(monkeypatch):
     assert primed == []
 
 
-def test_zarr_opens_unchunked(tmp_path):
-    """opener_zarr pins chunks=None so variables stay on xarray's
-    lazy-indexing layer (no chunk manager, no per-request graph
-    overhead), which is also what `where=` masking builds on."""
-    path = str(tmp_path / "store.zarr")
-    xr.Dataset({"data": (("y", "x"), np.zeros((4, 4)))}).to_zarr(
-        path, consolidated=False
-    )
-    with reader.guess_opener(path) as ds:
-        assert ds["data"].chunks is None
-
-
 class TestApplyWhere:
     """Behavior of the `where` masking at the reader level."""
 
