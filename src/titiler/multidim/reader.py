@@ -339,17 +339,18 @@ class _MaskedArray(BackendArray):
     each mask variable, then combines them in numpy. Masking therefore
     still happens before warping/resampling, without dask.
 
-    `masks` holds `(predicate, value, mask)` triples; a mask may lack some
-    of `data`'s dimensions (a time-invariant flag under `sel=time=...`)
-    and is indexed by the dimensions it has, then broadcast.
+    `masks` pairs each condition variable's array with the conditions on it,
+    so a variable is read only once, no matter how many conditions test it.
+    The selected variable's own entry is `data` itself, so its conditions test
+    the window already read. A mask may lack some of `data`'s dimensions
+    (a time-invariant flag under `sel=time=...`) and is indexed by the
+    dimensions it has, then broadcast.
     """
 
     def __init__(
         self,
         data: xr.DataArray,
-        masks: Sequence[
-            tuple[Callable[[np.ndarray, float], np.ndarray], float, xr.DataArray]
-        ],
+        masks: Sequence[tuple[xr.DataArray, Sequence[WhereCondition]]],
     ) -> None:
         self.data = data
         self.masks = masks
@@ -368,12 +369,20 @@ class _MaskedArray(BackendArray):
         sel = dict(zip(self.data.dims, key))
         window = self.data.isel(sel).values
         keep = np.ones(window.shape, dtype=bool)
-        for predicate, value, mask in self.masks:
-            values = mask.isel({d: k for d, k in sel.items() if d in mask.dims}).values
+        for mask, conditions in self.masks:
+            values = (
+                window
+                if mask is self.data
+                else mask.isel({d: k for d, k in sel.items() if d in mask.dims}).values
+            )
             # NaN compares False for every operator except != — without
             # this a fill pixel in the flag variable passes `flag!=1`
             # while failing the equivalent `flag==0`
-            keep &= predicate(values, value) & ~np.isnan(values)
+            keep &= ~np.isnan(values)
+
+            for condition in conditions:
+                predicate = _WHERE_PREDICATE_BY_OP[condition.op]
+                keep &= predicate(values, condition.value)
         return np.where(keep, window, np.nan).astype(self.dtype, copy=False)
 
 
@@ -440,9 +449,15 @@ class XarrayReader(Reader):
         # transform and pixels all come from the same DataArray
         ds = self.ds
         data = self.input
-        masks = []
+        arrays: Dict[str, xr.DataArray] = {self.variable: data}
+        groups: Dict[str, List[WhereCondition]] = {}
+
         for condition in conditions:
             name = condition.variable
+            groups.setdefault(name, []).append(condition)
+
+            if name in arrays:
+                continue
             # a mask may legitimately lack some of the request's dimensions
             # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
             # only the selectors whose dimension the mask variable has
@@ -472,7 +487,8 @@ class XarrayReader(Reader):
                     f"Invalid where condition {condition.raw!r}: {name!r} "
                     f"coordinates do not match {self.variable!r}'s"
                 ) from e
-            masks.append((_WHERE_PREDICATE_BY_OP[condition.op], condition.value, da))
+            arrays[name] = da
+        masks = [(arrays[variable], group) for variable, group in groups.items()]
         # copy(data=...) keeps coords, attrs and encoding (hence rio.nodata
         # and the CRS) and stays lazy: the parent already derived
         # bounds/transform from `data`, and this is the same array
