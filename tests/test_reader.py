@@ -206,19 +206,15 @@ class TestApplyWhere:
         )
 
     def test_non_spatial_condition_variable_is_a_400(self, store):
-        """A 0/1-D condition variable must raise BadRequestError, not ValueError."""
-        from titiler.core.errors import BadRequestError
-
-        with pytest.raises(BadRequestError, match="line"):
+        """A 0/1-D condition variable must raise WhereConditionError, not ValueError."""
+        with pytest.raises(reader.WhereConditionError, match="line"):
             self._reader(store, where=["line>0"])
 
     def test_non_numeric_condition_variable_is_a_400(self, store):
         """A non-numeric condition variable must fail at construction, not on
         the first read."""
 
-        from titiler.core.errors import BadRequestError
-
-        with pytest.raises(BadRequestError, match="not numeric"):
+        with pytest.raises(reader.WhereConditionError, match="not numeric"):
             self._reader(store, where=["label==1"])
 
     def test_mask_without_selector_dims_is_accepted(self, store):
@@ -228,8 +224,6 @@ class TestApplyWhere:
 
     def test_dataset_closed_when_where_is_invalid(self, store, monkeypatch):
         """A 400 raised by _apply_where must not leak the opened dataset."""
-        from titiler.core.errors import BadRequestError
-
         closed = []
         real_opener = reader.guess_opener
 
@@ -240,7 +234,7 @@ class TestApplyWhere:
             return ds
 
         monkeypatch.setattr(reader, "guess_opener", spy_opener)
-        with pytest.raises(BadRequestError):
+        with pytest.raises(reader.WhereConditionError):
             self._reader(store, where=["nope==1"])
         assert closed == [True]
 
@@ -248,9 +242,7 @@ class TestApplyWhere:
         """A malformed condition must 400 without any I/O. The store does not
         exist, so opening it before parsing would raise a different error."""
 
-        from titiler.core.errors import BadRequestError
-
-        with pytest.raises(BadRequestError, match="expected"):
+        with pytest.raises(reader.WhereConditionError, match="expected"):
             self._reader(str(tmp_path / "missing.zarr"), where=["data=1"])
 
     def test_where_masking_stays_lazy(self, store):
@@ -262,9 +254,7 @@ class TestApplyWhere:
         """A mask whose coordinates differ from the data's must 400 —
         .where() would align with join='inner' and silently shrink or
         empty the data while bounds/transform go stale."""
-        from titiler.core.errors import BadRequestError
-
-        with pytest.raises(BadRequestError, match="offgrid"):
+        with pytest.raises(reader.WhereConditionError, match="offgrid"):
             self._reader(store, where=["offgrid>=0"])
 
     def test_where_preserves_encoding(self, store):
@@ -351,7 +341,5 @@ class TestApplyWhere:
         """A mask with a dimension not in the data must fail at construction,
         not on the first read."""
 
-        from titiler.core.errors import BadRequestError
-
-        with pytest.raises(BadRequestError, match="depth"):
+        with pytest.raises(reader.WhereConditionError, match="depth"):
             self._reader(store, where=["deep>0"])

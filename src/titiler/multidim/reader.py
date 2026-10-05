@@ -28,7 +28,6 @@ from xarray.backends import BackendArray
 from xarray.core import indexing
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from titiler.core.errors import BadRequestError
 from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
@@ -281,6 +280,10 @@ _WHERE_CONDITION_RE = re.compile(
 )
 
 
+class WhereConditionError(Exception):
+    """A `where=` condition is malformed or cannot mask the selected variable."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class WhereCondition:
     """One parsed `{variable}{op}{number}` masking condition."""
@@ -301,7 +304,7 @@ def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
             one of `==`, `!=`, `<`, `<=`, `>`, `>=` (e.g., `flag==0`).
 
     Raises:
-        BadRequestError: If any string is malformed. The message lists every
+        WhereConditionError: If any string is malformed. The message lists every
             malformed string.
     """
     parsed = []
@@ -319,7 +322,7 @@ def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
         else:
             invalid.append(condition)
     if invalid:
-        raise BadRequestError(
+        raise WhereConditionError(
             f"Invalid where condition {', '.join(map(repr, invalid))}: expected "
             "`{variable}{op}{number}` with op one of "
             f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
@@ -439,7 +442,7 @@ class XarrayReader(Reader):
         if missing := sorted(
             {c.variable for c in conditions if c.variable not in self.ds}
         ):
-            raise BadRequestError(
+            raise WhereConditionError(
                 f"Invalid where condition: variable {', '.join(map(repr, missing))} "
                 "not found in the dataset"
             )
@@ -464,13 +467,13 @@ class XarrayReader(Reader):
             try:
                 da = get_variable(ds, name, sel=sel)
             except (KeyError, AssertionError, ValueError) as e:
-                raise BadRequestError(
+                raise WhereConditionError(
                     f"Invalid where condition {condition.raw!r}: {name!r} cannot "
                     f"mask {self.variable!r} for this request"
                 ) from e
 
             if extra_dims := set(da.dims) - set(self.input.dims):
-                raise BadRequestError(
+                raise WhereConditionError(
                     f"Invalid where condition {condition.raw!r}: {name!r} has "
                     f"dimensions {sorted(map(str, extra_dims))} that "
                     f"{self.variable!r} does not"
@@ -482,13 +485,13 @@ class XarrayReader(Reader):
             try:
                 xr.align(data, da, join="exact")
             except ValueError as e:
-                raise BadRequestError(
+                raise WhereConditionError(
                     f"Invalid where condition {condition.raw!r}: {name!r} "
                     f"coordinates do not match {self.variable!r}'s"
                 ) from e
 
             if da.dtype.kind not in "biuf":
-                raise BadRequestError(
+                raise WhereConditionError(
                     f"Invalid where condition {condition.raw!r}: {name!r} is "
                     f"not numeric (dtype {da.dtype})"
                 )
