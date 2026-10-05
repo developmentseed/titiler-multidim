@@ -166,6 +166,8 @@ class TestApplyWhere:
                 "offgrid": (("latitude", "longitude"), rng.random((18, 36))),
                 # 0 = good, 1 = bad, NaN at [0, 0] = no retrieval (fill)
                 "flag": (("lat", "lon"), flag),
+                # has a depth dim not in the data, so it cannot mask it
+                "deep": (("depth", "lat", "lon"), np.zeros((2, 18, 36))),
             },
             coords={
                 "time": np.arange(4),
@@ -173,6 +175,7 @@ class TestApplyWhere:
                 "lon": lon,
                 "latitude": lat + 0.1,
                 "longitude": lon + 0.1,
+                "depth": [0, 1],
             },
         )
         path = str(tmp_path_factory.mktemp("where") / "store.zarr")
@@ -332,3 +335,12 @@ class TestApplyWhere:
             expected = ref.part(bbox, **kwargs)
         np.testing.assert_array_equal(img.array.mask, expected.array.mask)
         np.testing.assert_allclose(img.array.filled(0), expected.array.filled(0))
+
+    def test_mask_with_dims_not_in_the_data_is_a_400(self, store):
+        """A mask with a dimension not in the data must fail at construction,
+        not on the first read."""
+
+        from titiler.core.errors import BadRequestError
+
+        with pytest.raises(BadRequestError, match="depth"):
+            self._reader(store, where=["deep>0"])
