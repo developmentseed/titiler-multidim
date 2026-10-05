@@ -139,11 +139,10 @@ def opener_zarr(
 ) -> xr.Dataset:
     """Open a Zarr store with xarray's lazy (unchunked) arrays.
 
-    Mirrors titiler.xarray's fs_open_dataset zarr branch but pins
-    chunks=None so every variable stays on xarray's lazy-indexing layer
-    (a windowed read costs one store request per touched chunk, no task
-    graph). `where=` masking builds on that same layer (see `_MaskedArray`),
-    so nothing here needs a chunk manager.
+    Mirrors titiler.xarray's `fs_open_dataset zarr` branch but pins
+    `chunks=None` so every variable stays on xarray's lazy-indexing layer,
+    even when dask is installed. A windowed read costs one store request
+    per touched chunk, with no task graph.
     """
     store = zarr.storage.FsspecStore.from_url(
         src_path, storage_options={"asynchronous": True, **kwargs}
