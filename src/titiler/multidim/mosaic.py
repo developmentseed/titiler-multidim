@@ -35,10 +35,9 @@ class XarrayMosaicBackend(BaseBackend):
             self.close()
             raise
 
-        # rio-tiler's read paths (tile, part, feature, point) open each asset
-        # with `with self.reader(asset, ...)`. Hand back the reader opened
-        # above instead, so a request opens each dataset once; nullcontext
-        # keeps those `with` blocks from closing it before close().
+        # The following prevents rio-tiler's with statements from closing
+        # the dataset. The mosaic backend controls opening/closing instead,
+        # so the dataset only needs to be opened once and can be shared.
         self.reader = lambda asset, **_: contextlib.nullcontext(self._readers[asset])  # type: ignore[assignment]
 
     def _open_sources(self) -> None:
