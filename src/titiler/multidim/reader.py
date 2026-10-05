@@ -292,7 +292,18 @@ class WhereCondition:
 
 
 def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
-    """Parse `where=` condition strings. Syntax only: no dataset needed."""
+    """Parse `where=` condition strings.
+
+    Checks syntax only, so no dataset is needed.
+
+    Args:
+        conditions: Zero or more `{variable}{op}{number}` strings, with op
+            one of `==`, `!=`, `<`, `<=`, `>`, `>=` (e.g., `flag==0`).
+
+    Raises:
+        BadRequestError: If any string is malformed. The message lists every
+            malformed string.
+    """
     parsed = []
     invalid = []
     for condition in conditions:
@@ -368,7 +379,15 @@ class _MaskedArray(BackendArray):
 
 @attr.s
 class XarrayReader(Reader):
-    """Custom XarrayReader with Icechunk and virtual chunk support."""
+    """Custom XarrayReader with Icechunk, virtual chunk, and `where` masking support.
+
+    Attributes:
+        where: Zero or more conditions masking the selected variable, in the
+            form `parse_where` accepts, ANDed together. Pixels failing any
+            condition read as nodata. A malformed condition, or one whose
+            variable cannot mask this request, fails when the reader is
+            constructed rather than on the first read.
+    """
 
     where: List[str] = attr.ib(factory=list, kw_only=True)
 
@@ -435,8 +454,8 @@ class XarrayReader(Reader):
                     f"Invalid where condition {condition.raw!r}: {name!r} cannot "
                     f"mask {self.variable!r} for this request"
                 ) from e
-            extra_dims = set(da.dims) - set(self.input.dims)
-            if extra_dims:
+
+            if extra_dims := set(da.dims) - set(self.input.dims):
                 raise BadRequestError(
                     f"Invalid where condition {condition.raw!r}: {name!r} has "
                     f"dimensions {sorted(map(str, extra_dims))} that "
