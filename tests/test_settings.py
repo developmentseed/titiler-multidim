@@ -55,3 +55,14 @@ def test_app_settings_secret_arn_defaults_off():
         reader_role_arn="arn:aws:iam::123456789012:role/reader",
     )
     assert "TITILER_MULTIDIM_EARTHDATA_SECRET_ARN" not in settings.additional_env
+
+
+def test_allowed_url_prefixes_defaults_open():
+    assert make_settings().allowed_url_prefixes == []
+
+
+def test_allowed_url_prefixes_parses_csv(monkeypatch):
+    monkeypatch.setenv(
+        "TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", "s3://bucket/a/, s3://bucket/b/ ,"
+    )
+    assert make_settings().allowed_url_prefixes == ["s3://bucket/a/", "s3://bucket/b/"]
