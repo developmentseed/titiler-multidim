@@ -1,3 +1,4 @@
+import sys
 import json
 import os
 from urllib.parse import urlencode
@@ -427,3 +428,122 @@ def test_errors_not_cacheable(app):
     healthz = app.get("/healthz")
     assert healthz.status_code == 200
     assert "cache-control" not in healthz.headers
+
+
+@pytest.fixture
+def allowlisted_app(monkeypatch, request):
+    """App restricted to the local fixtures directory and one https prefix."""
+    # no trailing slashes and a mixed-case host, to exercise normalisation
+    monkeypatch.setenv(
+        "TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", f"{DATA_DIR},HTTPS://Example.com/Data"
+    )
+    return request.getfixturevalue("app")
+
+
+def test_url_outside_allowlist_rejected(allowlisted_app):
+    # one disallowed url in a mosaic list rejects the whole request, and the
+    # query string of the offending url is not echoed back
+    response = allowlisted_app.get(
+        "/variables",
+        params={"url": [test_zarr_store_v2, "s3://not-ours/store.zarr?token=abc"]},
+    )
+    assert response.status_code == 400
+    assert "s3://not-ours/store.zarr" in response.json()["detail"]
+    assert "token=abc" not in response.text
+
+
+def test_url_inside_allowlist_served(allowlisted_app):
+    response = allowlisted_app.get("/variables", params={"url": test_zarr_store_v2})
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"{DATA_DIR}_other/store.zarr",  # shares the prefix string, not the directory
+        f"{DATA_DIR}/../store.zarr",
+        f"{DATA_DIR}/%2e%2e/store.zarr",
+        f"{DATA_DIR}/./store.zarr",
+        "https://example.com/DataX/store.zarr",
+        "https://example.com/Data/../store.zarr",
+        "https://example.com@evil.com/Data/store.zarr",
+        "https://example.com/data/store.zarr",  # paths stay case-sensitive
+    ],
+)
+def test_url_allowlist_rejects_escapes(allowlisted_app, url):
+    response = allowlisted_app.get("/variables", params={"url": url})
+    assert response.status_code == 400
+    assert "url not permitted" in response.json()["detail"]
+
+
+def test_url_allowlist_ignores_scheme_and_host_case(allowlisted_app):
+    from titiler.multidim.factory import DatasetPathParams
+
+    urls = ["https://EXAMPLE.com/Data/store.zarr", "HTTPS://example.com/Data"]
+    assert DatasetPathParams(url=urls) == urls
+
+
+def test_url_allowlist_matches_before_query_string(allowlisted_app):
+    from titiler.multidim.factory import DatasetPathParams
+
+    urls = ["https://example.com/Data?token=abc"]
+    assert DatasetPathParams(url=urls) == urls
+
+
+def test_url_allowlist_rejects_dot_segment_prefix(monkeypatch, request):
+    # a configured prefix that can't be matched safely fails startup rather
+    # than being dropped (which would silently reject every request)
+    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", "s3://bucket/a/../b")
+    with pytest.raises(ValueError, match="path segment"):
+        request.getfixturevalue("app")
+    # drop the half-imported modules so later imports see the restored env
+    for module in [m for m in sys.modules if m.startswith("titiler.multidim")]:
+        del sys.modules[module]
+
+
+@pytest.mark.parametrize("prefix", [DATA_DIR, f"file://{os.path.abspath(DATA_DIR)}"])
+@pytest.mark.parametrize(
+    "url", [test_zarr_store_v2, f"file://{os.path.abspath(test_zarr_store_v2)}"]
+)
+def test_url_allowlist_bare_paths_match_file_urls(monkeypatch, request, prefix, url):
+    monkeypatch.setenv("TITILER_MULTIDIM_ALLOWED_URL_PREFIXES", prefix)
+    request.getfixturevalue("app")
+    from titiler.multidim.factory import DatasetPathParams
+
+    assert DatasetPathParams(url=[url]) == [url]
+
+
+def test_landing(app):
+    response = app.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    body = response.json()
+    assert body["title"] == "titiler-multidim"
+    rels = {link["rel"] for link in body["links"]}
+    assert {"self", "service-desc", "service-doc"} <= rels
+    # every internal link resolves
+    for link in body["links"]:
+        if link["href"].startswith("http://testserver"):
+            assert app.get(link["href"]).status_code == 200, link["href"]
+
+    html = app.get("/", headers={"accept": "text/html"})
+    assert html.status_code == 200
+    assert "text/html" in html.headers["content-type"]
+    assert "/api.html" in html.text
+
+    assert app.get("/?f=html").headers["content-type"].startswith("text/html")
+
+
+def test_conformance(app):
+    response = app.get("/conformance")
+    assert response.status_code == 200
+    conforms_to = response.json()["conformsTo"]
+    assert (
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page"
+        in conforms_to
+    )
+    assert "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core" in conforms_to
+
+    html = app.get("/conformance?f=html")
+    assert html.status_code == 200
+    assert "text/html" in html.headers["content-type"]

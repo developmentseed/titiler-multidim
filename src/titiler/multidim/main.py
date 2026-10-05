@@ -2,18 +2,22 @@
 
 import logging
 import os
+from typing import Annotated, Literal
 
 import icechunk
+import jinja2
 import zarr
 from earthaccess_auth.exceptions import (
     LoginAttemptFailure,
     LoginStrategyUnavailable,
     S3CredentialsRequestFailure,
 )
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from starlette import status
-from starlette.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.templating import Jinja2Templates
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import (
@@ -21,6 +25,9 @@ from titiler.core.middleware import (
     LoggerMiddleware,
     TotalTimeMiddleware,
 )
+from titiler.core.models.OGC import Conformance, Landing
+from titiler.core.resources.enums import MediaType
+from titiler.core.utils import accept_media_type, create_html_response
 from titiler.mosaic.errors import MOSAIC_STATUS_CODES
 from titiler.xarray.extensions import DatasetMetadataExtension, ValidateExtension
 
@@ -48,6 +55,29 @@ app = FastAPI(
     root_path=api_settings.root_path,
 )
 
+# local landing.html, then titiler.xarray's header (navbar) and
+# conformance.html, then the titiler.core defaults
+templates = Jinja2Templates(
+    env=jinja2.Environment(
+        autoescape=jinja2.select_autoescape(["html", "xml"]),
+        loader=jinja2.ChoiceLoader(
+            [
+                jinja2.PackageLoader(__package__, "templates"),
+                jinja2.PackageLoader("titiler.xarray", "templates"),
+                jinja2.PackageLoader("titiler.core", "templates"),
+            ]
+        ),
+    )
+)
+
+TITILER_CONFORMS_TO = {
+    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
+    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/html",
+    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
+}
+
 ###############################################################################
 # Tiles endpoints
 xarray_factory = XarrayMosaicTilerFactory(
@@ -56,26 +86,31 @@ xarray_factory = XarrayMosaicTilerFactory(
         DatasetMetadataExtension(dataset_opener=open_metadata_dataset),
         ValidateExtension(dataset_opener=open_metadata_dataset),
     ],
+    templates=templates,
 )
 app.include_router(xarray_factory.router, tags=["Xarray Tiler API"])
+TITILER_CONFORMS_TO.update(xarray_factory.conforms_to)
 
 ###############################################################################
 # TileMatrixSets endpoints
-tms = TMSFactory()
+tms = TMSFactory(templates=templates)
 app.include_router(tms.router, tags=["Tiling Schemes"])
+TITILER_CONFORMS_TO.update(tms.conforms_to)
 
 ###############################################################################
 # Algorithms endpoints
-algorithms = AlgorithmFactory()
+algorithms = AlgorithmFactory(templates=templates)
 app.include_router(algorithms.router, tags=["Algorithms"])
+TITILER_CONFORMS_TO.update(algorithms.conforms_to)
 
 ###############################################################################
 # Colormaps endpoints
-cmaps = ColorMapFactory()
+cmaps = ColorMapFactory(templates=templates)
 app.include_router(
     cmaps.router,
     tags=["ColorMaps"],
 )
+TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
 error_codes = {
     zarr.errors.GroupNotFoundError: status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -208,6 +243,141 @@ if api_settings.debug:
 def ping():
     """Health check."""
     return {"ping": "pong!"}
+
+
+def _output_type(request: Request, f: str | None) -> MediaType:
+    """Pick html or json from ?f=, else the Accept header, else json."""
+    if f:
+        return MediaType[f]
+    return (
+        accept_media_type(
+            request.headers.get("accept", ""), [MediaType.html, MediaType.json]
+        )
+        or MediaType.json
+    )
+
+
+FormatQuery = Annotated[
+    Literal["html", "json"] | None,
+    Query(
+        description="Response MediaType. Defaults to endpoint's default or value defined in `accept` header."
+    ),
+]
+
+
+@app.get(
+    "/",
+    response_model=Landing,
+    response_model_exclude_none=True,
+    responses={200: {"content": {"text/html": {}, "application/json": {}}}},
+    tags=["OGC Common"],
+)
+def landing(request: Request, f: FormatQuery = None):
+    """TiTiler landing page."""
+    data = {
+        "title": api_settings.name,
+        "description": "Dynamic tiles for multidimensional (Zarr, NetCDF, icechunk) datasets, built on titiler.xarray.",
+        "links": [
+            {
+                "title": "Landing page",
+                "href": str(request.url_for("landing")),
+                "type": "text/html",
+                "rel": "self",
+            },
+            {
+                "title": "The API definition (JSON)",
+                "href": str(request.url_for("openapi")),
+                "type": "application/vnd.oai.openapi+json;version=3.0",
+                "rel": "service-desc",
+            },
+            {
+                "title": "The API documentation",
+                "href": str(request.url_for("swagger_ui_html")),
+                "type": "text/html",
+                "rel": "service-doc",
+            },
+            {
+                "title": "Conformance Declaration",
+                "href": str(request.url_for("conformance")),
+                "type": "text/html",
+                "rel": "http://www.opengis.net/def/rel/ogc/1.0/conformance",
+            },
+            {
+                "title": "Map viewer",
+                "href": str(
+                    request.url_for("map_viewer", tileMatrixSetId="WebMercatorQuad")
+                ),
+                "type": "text/html",
+                "rel": "data",
+            },
+            {
+                "title": "List of Available TileMatrixSets",
+                "href": str(request.url_for("tilematrixsets")),
+                "type": "application/json",
+                "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-schemes",
+            },
+            {
+                "title": "List of Available Algorithms",
+                "href": str(request.url_for("available_algorithms")),
+                "type": "application/json",
+                "rel": "data",
+            },
+            {
+                "title": "List of Available ColorMaps",
+                "href": str(request.url_for("available_colormaps")),
+                "type": "application/json",
+                "rel": "data",
+            },
+            {
+                "title": "TiTiler Documentation (external link)",
+                "href": "https://developmentseed.org/titiler/",
+                "type": "text/html",
+                "rel": "doc",
+            },
+            {
+                "title": "titiler-multidim source code (external link)",
+                "href": "https://github.com/developmentseed/titiler-multidim",
+                "type": "text/html",
+                "rel": "doc",
+            },
+        ],
+    }
+
+    if _output_type(request, f) == MediaType.html:
+        return create_html_response(
+            request,
+            data,
+            title=api_settings.name,
+            template_name="landing",
+            templates=templates,
+        )
+    return data
+
+
+@app.get(
+    "/conformance",
+    response_model=Conformance,
+    response_model_exclude_none=True,
+    responses={200: {"content": {"text/html": {}, "application/json": {}}}},
+    tags=["OGC Common"],
+)
+def conformance(request: Request, f: FormatQuery = None):
+    """Conformance classes.
+
+    Called with `GET /conformance`.
+
+    """
+    data = {"conformsTo": sorted(TITILER_CONFORMS_TO)}
+
+    if _output_type(request, f) == MediaType.html:
+        return create_html_response(
+            request,
+            data,
+            title="Conformance",
+            template_name="conformance",
+            templates=templates,
+        )
+    return data
 
 
 if __name__ == "__main__":
