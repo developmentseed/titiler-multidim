@@ -8,6 +8,11 @@ updates:
       interval: monthly
     groups:
       all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
         patterns:
           - "*"
     commit-message:
@@ -21,6 +26,11 @@ updates:
       interval: monthly
     groups:
       all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
         patterns:
           - "*"
     commit-message:
