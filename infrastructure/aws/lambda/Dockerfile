@@ -194,6 +194,13 @@ find . -type d -name '__pycache__' -print0 | xargs -0 rm -rf
 find . -type f -name '*.py'        -print0 | xargs -0 rm -f
 find . -type d -name 'tests'       -print0 | xargs -0 rm -rf
 rm -rdf numpy/doc/ bin geos_license Misc 
+# Prune botocore's service models (~18 MB of JSON for 400+ services) down to
+# the services this app uses: s3 (s3fs/aiobotocore), sts (role assumption),
+# secretsmanager (Earthdata credentials). Top-level files (endpoints.json etc.)
+# are kept — the loaders need them. A new boto3/aiobotocore client for another
+# service raises UnknownServiceError at runtime until its model is re-added here.
+find botocore/data -mindepth 1 -maxdepth 1 -type d \
+    ! -name s3 ! -name sts ! -name secretsmanager -print0 | xargs -0 rm -rf
 find . -type f -name '*.so*' -exec strip --strip-unneeded {} \;
 EOF
 
