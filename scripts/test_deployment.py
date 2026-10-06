@@ -49,7 +49,7 @@ TEST_CASES = (
         "virtual TEMPO HCHO Icechunk (earthdata auth)",
         "4/3/6",
         {
-            "url": "s3://airquality-data-store-develop/tempo/hcho/v04-trial",
+            "url": "s3://airquality-data-store-develop/tempo/hcho/v04",
             "variable": "vertical_column",
             "sel": "time=nearest::2026-08-24T15:40:44",
             "rescale": "0,1.5e16",
