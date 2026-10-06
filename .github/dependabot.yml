@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: uv
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 7
     directory: "/"
