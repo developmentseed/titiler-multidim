@@ -60,6 +60,19 @@ unchanged when filtering it, set `rescale` or `colormap_name`.
 curl "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=...&variable=vertical_column&where=main_data_quality_flag==0&where=eff_cloud_fraction<0.2&rescale=0,3e16&colormap_name=viridis"
 ```
 
+URL-encode `where` values when you write a URL by hand. In a URL, `+`
+means a space, so `where=x>1e+5` is read as `x>1e 5` and the request fails
+with a 400. Write `1e5`, or write `+` as `%2B`. Also write `<` as `%3C` and
+`>` as `%3E`, because some clients and proxies do not accept them as-is.
+curl can encode the values for you. Here's an example:
+
+```bash
+curl -G "$API_URL/tiles/WebMercatorQuad/4/3/6.png" \
+  --data-urlencode "url=..." --data-urlencode "variable=vertical_column" \
+  --data-urlencode "where=vertical_column<1e+17" \
+  --data-urlencode "rescale=0,3e16" --data-urlencode "colormap_name=viridis"
+```
+
 `tilejson.json` forwards `where` into its tile template, so filtered
 TileJSON URLs work in map clients unchanged.
 

@@ -91,7 +91,8 @@ class MultidimXarrayParams(XarrayParams):
                 "with op one of ==, !=, <, <=, >, >= "
                 "(e.g. `where=main_data_quality_flag==0`). Repeat the "
                 "parameter to AND conditions. Pixels failing any condition "
-                "render as nodata."
+                "render as nodata. URL-encode the value. In a URL, `+` means "
+                "a space, so write `1e5` or `1e%2B5`, not `1e+5`."
             ),
         ),
     ] = None
