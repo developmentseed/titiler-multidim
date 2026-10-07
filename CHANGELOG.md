@@ -10,7 +10,7 @@
 ### Features
 
 * add OGC landing page at / and /conformance ([#170](https://github.com/developmentseed/titiler-multidim/issues/170)) ([3bd2832](https://github.com/developmentseed/titiler-multidim/commit/3bd2832f7916e88c387c3ce649cd709f86ca96c5))
-* filtering based on multiple variables (no dask) ([#166](https://github.com/developmentseed/titiler-multidim/issues/166)) ([da2ce43](https://github.com/developmentseed/titiler-multidim/commit/da2ce432e609ccd8de53c78eb37b2dc572c75c88))
+* support filtering based on multiple variables ([#166](https://github.com/developmentseed/titiler-multidim/issues/166)) ([da2ce43](https://github.com/developmentseed/titiler-multidim/commit/da2ce432e609ccd8de53c78eb37b2dc572c75c88))
 * restrict dataset urls to configured prefixes ([#169](https://github.com/developmentseed/titiler-multidim/issues/169)) ([bcdbd1a](https://github.com/developmentseed/titiler-multidim/commit/bcdbd1a64220c2d01fe54d91e4cefc0d6e8b19fe))
 
 
