@@ -239,37 +239,22 @@ class TestApplyWhere:
             assert not src.input._in_memory
 
     def test_mask_on_mismatched_grid_is_a_400(self, store):
-        """A mask whose coordinates differ from the data's must 400 —
-        .where() would align with join='inner' and silently shrink or
-        empty the data while bounds/transform go stale."""
+        """A mask whose coordinates differ from the data's must 400, because
+        masks are applied by pixel position rather than by coordinates."""
         with pytest.raises(reader.WhereConditionError, match="offgrid"):
             self._reader(store, where=["offgrid>=0"])
 
     def test_where_preserves_encoding(self, store):
-        """.where() returns a bare array; losing encoding would turn
-        rio.nodata (from encoding['_FillValue']) into None whenever a
-        where= filter is present."""
-
-        def encodings_equal(enc1, enc2):
-            """Compare encodings, treating NaN values as equal."""
-            if enc1.keys() != enc2.keys():
-                return False
-            for key in enc1.keys():
-                v1, v2 = enc1[key], enc2[key]
-                # Handle NaN values specially (NaN != NaN in Python)
-                if isinstance(v1, float) and isinstance(v2, float):
-                    if np.isnan(v1) and np.isnan(v2):
-                        continue
-                if v1 != v2:
-                    return False
-            return True
+        """Masking keeps the variable's encoding, without which `rio.nodata`
+        (from `encoding['_FillValue']`) would be `None` whenever a `where=`
+        filter is present."""
 
         with (
             self._reader(store) as plain,
             self._reader(store, where=["mask2d>=0"]) as masked,
         ):
             assert plain.input.encoding  # fixture must actually carry encoding
-            assert encodings_equal(masked.input.encoding, plain.input.encoding)
+            np.testing.assert_equal(masked.input.encoding, plain.input.encoding)
 
     def test_fill_in_condition_variable_fails_the_filter(self, store):
         """NaN != 1 is True, so without a notnull guard a no-retrieval
@@ -295,7 +280,7 @@ class TestApplyWhere:
             assert not src.input._in_memory
             img = src.part((-30.0, -30.0, 30.0, 30.0), width=8, height=8)
         assert img.array.shape == (1, 8, 8)
-        assert shapes and all(shape < (18, 36) for shape in shapes), shapes
+        assert shapes and all(h < 18 and w < 36 for h, w in shapes), shapes
 
     def test_mask_applies_before_reprojection(self, store):
         """With bilinear resampling, masked pixels must be NaN before the
@@ -312,8 +297,6 @@ class TestApplyWhere:
             ds["data"]
             .isel(time=0)
             .where((ds["mask2d"] >= 0.5) & (ds["flag"] == 0) & ds["flag"].notnull())
-            .rename({"lat": "y", "lon": "x"})
-            .rio.write_crs("epsg:4326")
         )
         np.testing.assert_array_equal(eager.values, reference.values)
         from rio_tiler.io import XarrayReader as RioXarrayReader
@@ -331,3 +314,18 @@ class TestApplyWhere:
 
         with pytest.raises(reader.WhereConditionError, match="depth"):
             self._reader(store, where=["deep>0"])
+
+    def test_conditions_on_the_selected_and_a_repeated_variable(self, store):
+        """A condition on the selected variable tests the data itself, and
+        every condition on a repeated variable applies."""
+
+        where = ["data>=0.25", "mask2d>=0.25", "mask2d<0.75"]
+
+        with self._reader(store, where=where) as src:
+            masked = src.input.values
+            data = src.ds["data"].isel(time=0).values
+            mask2d = src.ds["mask2d"].values
+
+        keep = (data >= 0.25) & (mask2d >= 0.25) & (mask2d < 0.75)
+
+        np.testing.assert_array_equal(masked, np.where(keep, data, np.nan))

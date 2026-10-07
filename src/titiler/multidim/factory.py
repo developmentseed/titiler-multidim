@@ -86,8 +86,8 @@ class MultidimXarrayParams(XarrayParams):
         list[str] | None,
         Query(
             description=(
-                "Mask the selected variable by numeric conditions on other "
-                "variables of the same dataset, `{variable}{op}{number}` "
+                "Mask the selected variable by numeric conditions on any "
+                "variable of the same dataset, `{variable}{op}{number}` "
                 "with op one of ==, !=, <, <=, >, >= "
                 "(e.g. `where=main_data_quality_flag==0`). Repeat the "
                 "parameter to AND conditions. Pixels failing any condition "

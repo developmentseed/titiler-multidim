@@ -45,12 +45,16 @@ TiTiler 2 is a breaking API upgrade:
 ## Filtering with `where`
 
 Every data endpoint accepts a repeatable `where` parameter that masks the
-selected variable by numeric conditions on other variables of the same
+selected variable by numeric conditions on any variable of the same
 dataset — `{variable}{op}{number}` with op one of `==`, `!=`, `<`, `<=`,
 `>`, `>=`. Conditions are ANDed; pixels failing any condition render as
 nodata (transparent tiles, `null` from `/point`). The condition variables
 are sliced with the same `sel` as the main variable, and each distinct
-condition variable adds its chunk reads to the request.
+condition variable adds its chunk reads to the request. `where` converts an
+integer variable to float, because masked pixels are stored as NaN, which
+integers cannot represent. By default, TiTiler renders float values
+differently from integer values, so to keep an integer variable's colors
+unchanged when filtering it, set `rescale` or `colormap_name`.
 
 ```bash
 curl "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=...&variable=vertical_column&where=main_data_quality_flag==0&where=eff_cloud_fraction<0.2&rescale=0,3e16&colormap_name=viridis"

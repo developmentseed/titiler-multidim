@@ -247,7 +247,7 @@ _WHERE_PREDICATE_BY_OP: Dict[str, Callable[[np.ndarray, float], np.ndarray]] = {
 _WHERE_CONDITION_RE = re.compile(
     r"^\s*(?P<variable>[\w.-]+)\s*"
     rf"(?P<op>{'|'.join(map(re.escape, _WHERE_PREDICATE_BY_OP))})\s*"
-    r"(?P<value>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+    r"(?P<value>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
 )
 
 
@@ -302,7 +302,7 @@ def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
 
 
 class _MaskedArray(BackendArray):
-    """Lazy `where=` mask: `data` with pixels failing every `masks` set to NaN.
+    """Lazy `where=` mask: `data` with pixels failing any `masks` set to NaN.
 
     Xarray's lazy-indexing layer defers indexing only, so `data.where(mask)`
     on an unchunked variable would materialize the whole slice at reader
@@ -329,7 +329,7 @@ class _MaskedArray(BackendArray):
         self.data = data
         self.masks = masks
         self.shape = data.shape
-        # NaN needs a float dtype: same upcast xarray's .where() applied before
+        # NaN needs a float dtype
         self.dtype = np.result_type(data.dtype, np.float32)
 
     def __getitem__(self, key: indexing.ExplicitIndexer) -> np.ndarray:
@@ -347,7 +347,7 @@ class _MaskedArray(BackendArray):
             values = (
                 window
                 if mask is self.data
-                else mask.isel({d: k for d, k in sel.items() if d in mask.dims}).values
+                else mask.isel(sel, missing_dims="ignore").values
             )
             # NaN compares False for every operator except != — without
             # this a fill pixel in the flag variable passes `flag!=1`
@@ -400,7 +400,7 @@ class XarrayReader(Reader):
     def _apply_where(self, conditions: Sequence[WhereCondition]) -> None:
         """Mask the selected variable by the `where` conditions.
 
-        Each condition compares another variable of the same dataset,
+        Each condition compares a variable of the same dataset,
         extracted with the request's `sel` selectors (restricted to the
         dimensions each mask variable has) so the mask and the data
         describe the same slice. Conditions are ANDed; failing pixels
@@ -449,10 +449,10 @@ class XarrayReader(Reader):
                     f"dimensions {sorted(map(str, extra_dims))} that "
                     f"{self.variable!r} does not"
                 )
-            # .where() aligns with join='inner': a mask on an offset or
-            # coarser grid would silently shrink (or empty) the data while
-            # bounds/transform, computed from the unmasked variable, go
-            # stale — reject coordinate mismatches instead
+            # _read_window indexes each mask by the data's pixel positions,
+            # so a mask on an offset grid would silently mask the wrong
+            # pixels, and one on a coarser grid would fail on the first
+            # read. Reject coordinate mismatches instead.
             try:
                 xr.align(data, da, join="exact")
             except ValueError as e:
