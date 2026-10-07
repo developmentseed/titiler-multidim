@@ -41,10 +41,10 @@ GWETPROF = xr.DataArray(
 # Create dataset
 ds = xr.Dataset(
     {
-        "CDD0": CDD0.chunk(chunk_size),
-        "DISPH": DISPH.chunk(chunk_size),
-        "FROST_DAYS": FROST_DAYS.chunk(chunk_size),
-        "GWETPROF": GWETPROF.chunk(chunk_size),
+        "CDD0": CDD0,
+        "DISPH": DISPH,
+        "FROST_DAYS": FROST_DAYS,
+        "GWETPROF": GWETPROF,
     },
     coords={"time": time, "lat": lat, "lon": lon},
 )
@@ -55,6 +55,7 @@ ds.to_zarr(
     mode="w",
     zarr_format=3,
     consolidated=False,
+    encoding={name: {"chunks": tuple(chunk_size.values())} for name in ds.data_vars},
 )
 
 # Save dataset to a local Zarr store
@@ -63,4 +64,5 @@ ds.to_zarr(
     mode="w",
     zarr_format=2,
     consolidated=True,
+    encoding={name: {"chunks": tuple(chunk_size.values())} for name in ds.data_vars},
 )

@@ -42,6 +42,40 @@ TiTiler 2 is a breaking API upgrade:
 - Set a selector method on the selector itself, for example `sel=time=nearest::2020-01-06`, instead of using `sel_method`.
 - TileJSON now includes additional raster metadata fields.
 
+## Filtering with `where`
+
+Every data endpoint accepts a repeatable `where` parameter that masks the
+selected variable by numeric conditions on any variable of the same
+dataset — `{variable}{op}{number}` with op one of `==`, `!=`, `<`, `<=`,
+`>`, `>=`. Conditions are ANDed; pixels failing any condition render as
+nodata (transparent tiles, `null` from `/point`). The condition variables
+are sliced with the same `sel` as the main variable, and each distinct
+condition variable adds its chunk reads to the request. `where` converts an
+integer variable to float, because masked pixels are stored as NaN, which
+integers cannot represent. By default, TiTiler renders float values
+differently from integer values, so to keep an integer variable's colors
+unchanged when filtering it, set `rescale` or `colormap_name`.
+
+```bash
+curl "$API_URL/tiles/WebMercatorQuad/4/3/6.png?url=...&variable=vertical_column&where=main_data_quality_flag==0&where=eff_cloud_fraction<0.2&rescale=0,3e16&colormap_name=viridis"
+```
+
+URL-encode `where` values when you write a URL by hand. In a URL, `+`
+means a space, so `where=x>1e+5` is read as `x>1e 5` and the request fails
+with a 400. Write `1e5`, or write `+` as `%2B`. Also write `<` as `%3C` and
+`>` as `%3E`, because some clients and proxies do not accept them as-is.
+curl can encode the values for you. Here's an example:
+
+```bash
+curl -G "$API_URL/tiles/WebMercatorQuad/4/3/6.png" \
+  --data-urlencode "url=..." --data-urlencode "variable=vertical_column" \
+  --data-urlencode "where=vertical_column<1e+17" \
+  --data-urlencode "rescale=0,3e16" --data-urlencode "colormap_name=viridis"
+```
+
+`tilejson.json` forwards `where` into its tile template, so filtered
+TileJSON URLs work in map clients unchanged.
+
 ## Authorizing icechunk virtual chunk access
 
 Icechunk datasets can reference "virtual chunks" stored outside the repository (for example NetCDF files in another bucket). Access to those locations is denied unless each container URL prefix is explicitly authorized via the `TITILER_MULTIDIM_AUTHORIZED_CHUNK_ACCESS` setting, a JSON object mapping prefixes to access options:

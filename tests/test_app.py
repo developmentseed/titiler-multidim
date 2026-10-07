@@ -430,6 +430,80 @@ def test_errors_not_cacheable(app):
     assert "cache-control" not in healthz.headers
 
 
+class TestWhereParameter:
+    """Cross-variable masking via the repeatable `where` query parameter."""
+
+    params = {
+        "url": test_zarr_store_v3,
+        "variable": "DISPH",
+        "decode_times": False,
+        "sel": "time=0",
+    }
+
+    def test_true_condition_keeps_values(self, app):
+        plain = app.get("/point/10,10", params=self.params).json()["values"]
+        masked = app.get(
+            "/point/10,10", params={**self.params, "where": ["CDD0>=0"]}
+        ).json()["values"]
+        assert masked == plain
+        assert masked[0] is not None
+
+    def test_false_condition_masks_to_nodata(self, app):
+        response = app.get(
+            "/point/10,10",
+            params={**self.params, "where": ["CDD0>1", "GWETPROF>=0"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["values"] == [None]
+
+    def test_tile_renders_with_where(self, app):
+        response = app.get(
+            "/tiles/WebMercatorQuad/0/0/0.png",
+            params={**self.params, "where": ["CDD0<0.5"], "rescale": "0,1"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+
+    def test_tilejson_forwards_where(self, app):
+        response = app.get(
+            "/WebMercatorQuad/tilejson.json",
+            params={**self.params, "where": ["CDD0<0.5"]},
+        )
+        assert response.status_code == 200
+        assert "where=CDD0%3C0.5" in response.json()["tiles"][0]
+
+    @pytest.mark.parametrize(
+        "condition,detail",
+        [
+            ("CDD0=1", "expected"),
+            ("CDD0==stringy", "expected"),
+            ("nope==1", "not found"),
+        ],
+    )
+    def test_invalid_conditions_return_400(self, app, condition, detail):
+        response = app.get("/point/10,10", params={**self.params, "where": [condition]})
+        assert response.status_code == 400
+        assert detail in response.json()["detail"]
+
+    @pytest.mark.parametrize(
+        "raw,status",
+        [
+            ("CDD0>=-1e5", 200),
+            ("CDD0>=-1e%2B5", 200),
+            ("CDD0%3E%3D-1e%2B5", 200),
+            # in a URL, `+` means a space, so this arrives as `CDD0>=-1e 5`
+            ("CDD0>=-1e+5", 400),
+        ],
+    )
+    def test_where_value_url_encoding(self, app, raw, status):
+        """The value formats the README describes, sent as a hand-written URL."""
+        response = app.get(f"/point/10,10?{urlencode(self.params)}&where={raw}")
+        assert response.status_code == status
+        if status == 200:
+            plain = app.get("/point/10,10", params=self.params).json()["values"]
+            assert response.json()["values"] == plain
+
+
 @pytest.fixture
 def allowlisted_app(monkeypatch, request):
     """App restricted to the local fixtures directory and one https prefix."""
