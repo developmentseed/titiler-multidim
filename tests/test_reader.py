@@ -158,6 +158,10 @@ class TestApplyWhere:
                 "flag": (("lat", "lon"), flag),
                 # has a depth dim not in the data, so it cannot mask it
                 "deep": (("depth", "lat", "lon"), np.zeros((2, 18, 36))),
+                # Here we use int16 on purpose because to_zarr gives float variables
+                # a NaN _FillValue by default, but integers do not get one, so this
+                # creates a variable without a declared nodata.
+                "counts": (("lat", "lon"), np.ones((18, 36), dtype="int16")),
             },
             coords={
                 "time": np.arange(4),
@@ -314,6 +318,28 @@ class TestApplyWhere:
             expected = ref.part(bbox, **kwargs)
         np.testing.assert_array_equal(img.array.mask, expected.array.mask)
         np.testing.assert_allclose(img.array.filled(0), expected.array.filled(0))
+
+    def test_mask_excluded_from_kernel_without_declared_nodata(self, store):
+        """Masked pixels must stay out of the bilinear kernel even when the
+        variable declares no nodata, as they do when it declares NaN."""
+
+        from rio_tiler.io import XarrayReader as RioXarrayReader
+
+        bbox = (-100.0, -50.0, 100.0, 50.0)
+        kwargs = {"width": 40, "height": 20, "reproject_method": "bilinear"}
+
+        # "counts" does not declare a nodata value, so this tests that we
+        # properly catch this and declare NaN as nodata.
+        with reader.XarrayReader(
+            src_path=store, variable="counts", where=["mask2d>=0.5"]
+        ) as src:
+            img = src.part(bbox, **kwargs)
+            eager = src.input.copy(data=src.input.values)
+
+        with RioXarrayReader(input=eager.rio.write_nodata(np.nan)) as ref:
+            expected = ref.part(bbox, **kwargs)
+
+        np.testing.assert_array_equal(img.array.mask, expected.array.mask)
 
     def test_mask_with_dims_not_in_the_data_is_a_400(self, store):
         """A mask with a dimension not in the data must fail at construction,

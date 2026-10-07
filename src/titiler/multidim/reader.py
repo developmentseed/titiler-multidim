@@ -385,6 +385,12 @@ class XarrayReader(Reader):
         try:
             super().__attrs_post_init__()
             self._apply_where(conditions)
+
+            # Without a declared nodata, the warp would blend masked (NaN)
+            # pixels into their neighbors under bilinear or cubic resampling,
+            # so we must explicitly declare NaN as nodata.
+            if conditions and self.input.rio.nodata is None:
+                self.input = self.input.rio.write_nodata(np.nan, encoded=True)
         except Exception:
             # super() can raise after opening (bad variable/sel, missing
             # spatial metadata), so close the dataset if it got that far
