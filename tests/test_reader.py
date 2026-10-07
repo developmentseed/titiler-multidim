@@ -162,6 +162,13 @@ class TestApplyWhere:
                 # a NaN _FillValue by default, but integers do not get one, so this
                 # creates a variable without a declared nodata.
                 "counts": (("lat", "lon"), np.ones((18, 36), dtype="int16")),
+                # declares a non-NaN nodata through an attribute that xarray's
+                # mask_and_scale leaves alone, so rio.nodata reports -1
+                "sentinel": (
+                    ("lat", "lon"),
+                    np.ones((18, 36), dtype="int16"),
+                    {"nodata": -1},
+                ),
             },
             coords={
                 "time": np.arange(4),
@@ -255,17 +262,20 @@ class TestApplyWhere:
         with pytest.raises(reader.WhereConditionError, match="offgrid"):
             self._reader(store, where=["offgrid>=0"])
 
-    def test_where_preserves_encoding(self, store):
-        """Masking keeps the variable's encoding, without which `rio.nodata`
-        (from `encoding['_FillValue']`) would be `None` whenever a `where=`
-        filter is present."""
+    def test_where_preserves_encoding_except_fill_value(self, store):
+        """Masking keeps the variable's encoding (dtype, chunks, scale factors)
+        but replaces its fill: the masked array's fill is NaN by construction,
+        declared as a non-encoded nodata."""
 
         with (
             self._reader(store) as plain,
             self._reader(store, where=["mask2d>=0"]) as masked,
         ):
-            assert plain.input.encoding  # fixture must actually carry encoding
-            np.testing.assert_equal(masked.input.encoding, plain.input.encoding)
+            expected = dict(plain.input.encoding)
+            assert expected.pop("_FillValue", None) is not None  # fixture has one
+            assert "_FillValue" not in masked.input.encoding
+            np.testing.assert_equal(masked.input.encoding, expected)
+            assert np.isnan(masked.input.rio.nodata)
 
     def test_fill_in_condition_variable_fails_the_filter(self, store):
         """NaN != 1 is True, so without a notnull guard a no-retrieval
@@ -319,19 +329,22 @@ class TestApplyWhere:
         np.testing.assert_array_equal(img.array.mask, expected.array.mask)
         np.testing.assert_allclose(img.array.filled(0), expected.array.filled(0))
 
-    def test_mask_excluded_from_kernel_without_declared_nodata(self, store):
+    # "counts" declares no nodata; "sentinel" declares -1 through an attribute
+    @pytest.mark.parametrize("variable", ["counts", "sentinel"])
+    def test_mask_excluded_from_kernel_without_nan_nodata(self, store, variable):
         """Masked pixels must stay out of the bilinear kernel even when the
-        variable declares no nodata, as they do when it declares NaN."""
+        variable declares no nodata, or a non-NaN one, as they do when it
+        declares NaN. Otherwise the warp treats NaN as data and every output
+        pixel touching a masked source pixel becomes NaN: a halo of dropped
+        pixels around each filtered one."""
 
         from rio_tiler.io import XarrayReader as RioXarrayReader
 
         bbox = (-100.0, -50.0, 100.0, 50.0)
         kwargs = {"width": 40, "height": 20, "reproject_method": "bilinear"}
 
-        # "counts" does not declare a nodata value, so this tests that we
-        # properly catch this and declare NaN as nodata.
         with reader.XarrayReader(
-            src_path=store, variable="counts", where=["mask2d>=0.5"]
+            src_path=store, variable=variable, where=["mask2d>=0.5"]
         ) as src:
             img = src.part(bbox, **kwargs)
             eager = src.input.copy(data=src.input.values)
@@ -341,19 +354,28 @@ class TestApplyWhere:
 
         np.testing.assert_array_equal(img.array.mask, expected.array.mask)
 
-    def test_nodata_override_keeps_masked_pixels_masked(self, store):
+    # "counts" declares no nodata; "data" carries xarray's default encoded
+    # NaN _FillValue, as every float variable written by xarray does
+    @pytest.mark.parametrize("variable,sel", [("counts", None), ("data", ["time=0"])])
+    def test_nodata_override_keeps_masked_pixels_masked(self, store, variable, sel):
         """A `nodata=` override must not turn masked pixels into valid data.
 
-        rioxarray's reproject fills with the override but keeps reporting an
-        encoded nodata, so the declared NaN must not be encoded.
+        rioxarray's reproject fills with the override but keeps reporting the
+        source's encoded nodata, so rio-tiler's `arr.data == nodata` check
+        misses the filled pixels. The declared NaN must therefore not be
+        encoded, and the variable's own encoded _FillValue must go.
         """
 
         bbox = (-100.0, -50.0, 100.0, 50.0)
         with reader.XarrayReader(
-            src_path=store, variable="counts", where=["mask2d>=0.5"]
+            src_path=store,
+            variable=variable,
+            sel=sel,
+            decode_times=False,
+            where=["mask2d>=0.5"],
         ) as src:
             default = src.part(bbox, width=40, height=20)
-            overridden = src.part(bbox, width=40, height=20, nodata=-1)
+            overridden = src.part(bbox, width=40, height=20, nodata=-9)
 
         assert default.array.mask.any()
         np.testing.assert_array_equal(overridden.array.mask, default.array.mask)

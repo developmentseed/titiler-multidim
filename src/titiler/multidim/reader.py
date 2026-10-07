@@ -386,12 +386,17 @@ class XarrayReader(Reader):
             super().__attrs_post_init__()
             self._apply_where(conditions)
 
-            # Without a declared nodata, the warp would blend masked (NaN)
-            # pixels into their neighbors under bilinear or cubic resampling,
-            # so we must explicitly declare NaN as nodata. Not encoded: rioxarray's
-            # reproject keeps reporting an encoded nodata even after filling
-            # with a `nodata=` override, which would unmask the masked pixels.
-            if conditions and self.input.rio.nodata is None:
+            # The masked array is a fresh float array whose fill is NaN by
+            # construction, so declare NaN as its nodata whatever the variable
+            # declared. Without it, the warp treats NaN as data: masked pixels
+            # blend into (or, with a non-NaN declared nodata, smear NaN over)
+            # their neighbors under bilinear or cubic resampling.
+            # Drop the original encoded _FillValue too, and write NaN as an
+            # attribute: rioxarray's reproject keeps reporting an encoded
+            # nodata even after filling with a `nodata=` override, so the
+            # override's pixels would render as valid data.
+            if conditions:
+                self.input.encoding.pop("_FillValue", None)
                 self.input = self.input.rio.write_nodata(np.nan)
         except Exception:
             # super() can raise after opening (bad variable/sel, missing
