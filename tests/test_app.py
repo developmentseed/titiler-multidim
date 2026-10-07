@@ -485,6 +485,24 @@ class TestWhereParameter:
         assert response.status_code == 400
         assert detail in response.json()["detail"]
 
+    @pytest.mark.parametrize(
+        "raw,status",
+        [
+            ("CDD0>=-1e5", 200),
+            ("CDD0>=-1e%2B5", 200),
+            ("CDD0%3E%3D-1e%2B5", 200),
+            # in a URL, `+` means a space, so this arrives as `CDD0>=-1e 5`
+            ("CDD0>=-1e+5", 400),
+        ],
+    )
+    def test_where_value_url_encoding(self, app, raw, status):
+        """The value formats the README describes, sent as a hand-written URL."""
+        response = app.get(f"/point/10,10?{urlencode(self.params)}&where={raw}")
+        assert response.status_code == status
+        if status == 200:
+            plain = app.get("/point/10,10", params=self.params).json()["values"]
+            assert response.json()["values"] == plain
+
 
 @pytest.fixture
 def allowlisted_app(monkeypatch, request):
