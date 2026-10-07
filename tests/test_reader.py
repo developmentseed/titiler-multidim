@@ -341,6 +341,23 @@ class TestApplyWhere:
 
         np.testing.assert_array_equal(img.array.mask, expected.array.mask)
 
+    def test_nodata_override_keeps_masked_pixels_masked(self, store):
+        """A `nodata=` override must not turn masked pixels into valid data.
+
+        rioxarray's reproject fills with the override but keeps reporting an
+        encoded nodata, so the declared NaN must not be encoded.
+        """
+
+        bbox = (-100.0, -50.0, 100.0, 50.0)
+        with reader.XarrayReader(
+            src_path=store, variable="counts", where=["mask2d>=0.5"]
+        ) as src:
+            default = src.part(bbox, width=40, height=20)
+            overridden = src.part(bbox, width=40, height=20, nodata=-1)
+
+        assert default.array.mask.any()
+        np.testing.assert_array_equal(overridden.array.mask, default.array.mask)
+
     def test_mask_with_dims_not_in_the_data_is_a_400(self, store):
         """A mask with a dimension not in the data must fail at construction,
         not on the first read."""
