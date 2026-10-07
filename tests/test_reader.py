@@ -205,6 +205,13 @@ class TestApplyWhere:
         with pytest.raises(reader.WhereConditionError, match="not numeric"):
             self._reader(store, where=["label==1"])
 
+    def test_non_numeric_selected_variable_is_a_400(self, store):
+        """A non-numeric selected variable must raise WhereConditionError,
+        because the NaN fill needs a float dtype."""
+
+        with pytest.raises(reader.WhereConditionError, match="not numeric"):
+            reader.XarrayReader(src_path=store, variable="label", where=["mask2d>0"])
+
     def test_mask_without_selector_dims_is_accepted(self, store):
         """A (lat, lon) mask must work even when the request selects on time."""
         with self._reader(store, where=["mask2d>=0"]) as src:

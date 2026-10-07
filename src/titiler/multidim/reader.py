@@ -422,6 +422,13 @@ class XarrayReader(Reader):
         # transform and pixels all come from the same DataArray
         ds = self.ds
         data = self.input
+
+        if data.dtype.kind not in "biuf":
+            raise WhereConditionError(
+                f"Invalid where condition: {self.variable!r} is not numeric "
+                f"(dtype {data.dtype}), so it cannot be masked"
+            )
+
         arrays: Dict[str, xr.DataArray] = {self.variable: data}
         groups: Dict[str, List[WhereCondition]] = {}
 
