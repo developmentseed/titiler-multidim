@@ -20,11 +20,11 @@ def reader_cls():
 
 
 @pytest.fixture
-def opens(monkeypatch):
+def opens(app, monkeypatch):
     """Record every dataset open made through the reader's opener.
 
-    Request it after ``app`` in a test signature: the ``app`` fixture
-    re-imports ``titiler.multidim`` and would discard an earlier patch.
+    Depends on ``app`` because that fixture re-imports ``titiler.multidim``,
+    which would discard a patch made before it ran.
     """
     from titiler.multidim import reader
 
