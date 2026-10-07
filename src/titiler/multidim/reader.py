@@ -3,23 +3,31 @@
 from __future__ import annotations
 
 import logging
+import operator
 import os
+import re
 import time
+from dataclasses import dataclass
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
+    Sequence,
 )
 from urllib.parse import urlparse
 
 import attr
 import icechunk
+import numpy as np
 import obstore
 import xarray as xr
+from xarray.backends import BackendArray
+from xarray.core import indexing
 from boto3.session import Session
 from obstore.auth.boto3 import Boto3CredentialProvider
-from titiler.xarray.io import Reader, xarray_open_dataset
+from titiler.xarray.io import Reader, get_variable, xarray_open_dataset
 
 from titiler.multidim.chunk_access import (
     ChunkAccessMapping,
@@ -106,7 +114,7 @@ def opener_icechunk(
     logger.info("Opening Icechunk dataset: source=%s group=%s", log_path, group)
     started_at = time.monotonic()
     dataset = xr.open_dataset(
-        store,
+        store,  # type: ignore[arg-type]  # the zarr engine accepts stores; xarray's hints don't
         group=group,
         decode_times=decode_times,
         engine="zarr",
@@ -140,6 +148,7 @@ def identify_storage_backend(src_path: str) -> str:
     parsed = urlparse(src_path)
     protocol = parsed.scheme or "file"
 
+    store: obstore.store.LocalStore | obstore.store.S3Store
     if protocol == "file":
         store = obstore.store.LocalStore(src_path)
     elif protocol == "s3":
@@ -224,22 +233,266 @@ def _inject_settings(options: Dict[str, Any]) -> Dict[str, Any]:
     return options
 
 
+_WHERE_PREDICATE_BY_OP: Dict[str, Callable[[np.ndarray, float], np.ndarray]] = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    "<=": operator.le,
+    ">": operator.gt,
+    ">=": operator.ge,
+}
+
+# Use re.escape as a safety mechanism, in case an op string happens to contain
+# any re metacharacter.
+_WHERE_CONDITION_RE = re.compile(
+    r"^\s*(?P<variable>[\w.-]+)\s*"
+    rf"(?P<op>{'|'.join(map(re.escape, _WHERE_PREDICATE_BY_OP))})\s*"
+    r"(?P<value>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)\s*$"
+)
+
+
+class WhereConditionError(Exception):
+    """A `where=` condition is malformed or cannot mask the selected variable."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WhereCondition:
+    """One parsed `{variable}{op}{number}` masking condition."""
+
+    raw: str  # the original string, for error messages
+    variable: str
+    predicate: Callable[[np.ndarray, float], np.ndarray]
+    value: float
+
+
+def parse_where(conditions: Sequence[str]) -> List[WhereCondition]:
+    """Parse `where=` condition strings.
+
+    Checks syntax only, so no dataset is needed.
+
+    Args:
+        conditions: Zero or more `{variable}{op}{number}` strings, with op
+            one of `==`, `!=`, `<`, `<=`, `>`, `>=` (e.g., `flag==0`).
+
+    Raises:
+        WhereConditionError: If any string is malformed. The message lists every
+            malformed string.
+    """
+    parsed = []
+    invalid = []
+    for condition in conditions:
+        if match := _WHERE_CONDITION_RE.match(condition):
+            parsed.append(
+                WhereCondition(
+                    raw=condition,
+                    variable=match["variable"],
+                    predicate=_WHERE_PREDICATE_BY_OP[match["op"]],
+                    value=float(match["value"]),
+                )
+            )
+        else:
+            invalid.append(condition)
+    if invalid:
+        raise WhereConditionError(
+            f"Invalid where condition {', '.join(map(repr, invalid))}: expected "
+            "`{variable}{op}{number}` with op one of "
+            f"{', '.join(_WHERE_PREDICATE_BY_OP)}"
+        )
+    return parsed
+
+
+class _MaskedArray(BackendArray):
+    """Lazy `where=` mask: `data` with pixels failing any `masks` set to NaN.
+
+    Xarray's lazy-indexing layer defers indexing only, so `data.where(mask)`
+    on an unchunked variable would materialize the whole slice at reader
+    construction. Wrapping this in `indexing.LazilyIndexedArray` instead
+    keeps the mask inside that layer: rio-tiler's `clip_box` (an `isel`)
+    stays lazy and the first materialization (`rio.reproject`,
+    `to_masked_array`) reads only the requested window of `data` and of
+    each mask variable, then combines them in numpy. Masking therefore
+    still happens before warping/resampling, without dask.
+
+    `masks` pairs each condition variable's array with the conditions on it,
+    so a variable is read only once, no matter how many conditions test it.
+    The selected variable's own entry is `data` itself, so its conditions test
+    the window already read. A mask may lack some of `data`'s dimensions
+    (a time-invariant flag under `sel=time=...`) and is indexed by the
+    dimensions it has, then broadcast.
+    """
+
+    def __init__(
+        self,
+        data: xr.DataArray,
+        masks: Sequence[tuple[xr.DataArray, Sequence[WhereCondition]]],
+    ) -> None:
+        self.data = data
+        self.masks = masks
+        self.shape = data.shape
+        # NaN needs a float dtype
+        self.dtype = np.result_type(data.dtype, np.float32)
+
+    def __getitem__(self, key: indexing.ExplicitIndexer) -> np.ndarray:
+        # OUTER: rioxarray's clip_box and titiler.xarray's sortby only need
+        # slices and 1-D index arrays; vectorized keys get decomposed by xarray
+        return indexing.explicit_indexing_adapter(
+            key, self.shape, indexing.IndexingSupport.OUTER, self._read_window
+        )
+
+    def _read_window(self, key: tuple) -> np.ndarray:
+        sel = dict(zip(self.data.dims, key))
+        window = self.data.isel(sel).values
+        keep = np.ones(window.shape, dtype=bool)
+        for mask, conditions in self.masks:
+            values = (
+                window
+                if mask is self.data
+                else mask.isel(sel, missing_dims="ignore").values
+            )
+            # NaN compares False for every operator except != — without
+            # this a fill pixel in the flag variable passes `flag!=1`
+            # while failing the equivalent `flag==0`
+            keep &= ~np.isnan(values)
+
+            for condition in conditions:
+                keep &= condition.predicate(values, condition.value)
+        return np.where(keep, window, np.nan).astype(self.dtype, copy=False)
+
+
 @attr.s
 class XarrayReader(Reader):
-    """Custom XarrayReader with Icechunk and virtual chunk support."""
+    """Custom XarrayReader with Icechunk, virtual chunk, and `where` masking support.
+
+    Attributes:
+        where: Zero or more conditions masking the selected variable, in the
+            form `parse_where` accepts, ANDed together. Pixels failing any
+            condition read as nodata. A malformed condition, or one whose
+            variable cannot mask this request, fails when the reader is
+            constructed rather than on the first read.
+    """
+
+    where: List[str] = attr.ib(factory=list, kw_only=True)
 
     def __attrs_post_init__(self):
         """Configure the custom opener before the parent reads the dataset."""
         self.opener_options = _inject_settings(self.opener_options)
         self.opener = guess_opener
+        # parse before opening: a where= syntax error 400s without any I/O
+        conditions = parse_where(self.where)
         log_path = _log_path(self.src_path)
         logger.info("Initializing Xarray reader spatial metadata: source=%s", log_path)
         started_at = time.monotonic()
-        super().__attrs_post_init__()
+        try:
+            super().__attrs_post_init__()
+            self._apply_where(conditions)
+
+            # Without a declared nodata, the warp would blend masked (NaN)
+            # pixels into their neighbors under bilinear or cubic resampling,
+            # so we must explicitly declare NaN as nodata. Not encoded: rioxarray's
+            # reproject keeps reporting an encoded nodata even after filling
+            # with a `nodata=` override, which would unmask the masked pixels.
+            if conditions and self.input.rio.nodata is None:
+                self.input = self.input.rio.write_nodata(np.nan)
+        except Exception:
+            # super() can raise after opening (bad variable/sel, missing
+            # spatial metadata), so close the dataset if it got that far
+            if (ds := getattr(self, "ds", None)) is not None:
+                ds.close()
+            raise
         logger.info(
             "Initialized Xarray reader spatial metadata: source=%s elapsed_seconds=%.2f",
             log_path,
             time.monotonic() - started_at,
+        )
+
+    def _apply_where(self, conditions: Sequence[WhereCondition]) -> None:
+        """Mask the selected variable by the `where` conditions.
+
+        Each condition compares a variable of the same dataset,
+        extracted with the request's `sel` selectors (restricted to the
+        dimensions each mask variable has) so the mask and the data
+        describe the same slice. Conditions are ANDed; failing pixels
+        become NaN and follow the normal nodata path, so integer
+        variables are upcast to float. Nothing is read here: the mask is
+        applied lazily per window by `_MaskedArray`.
+        """
+        if not conditions:
+            return
+        if missing := sorted(
+            {c.variable for c in conditions if c.variable not in self.ds}
+        ):
+            raise WhereConditionError(
+                f"Invalid where condition: variable {', '.join(map(repr, missing))} "
+                "not found in the dataset"
+            )
+
+        # wrap self.input itself (the parent's one extraction) so bounds,
+        # transform and pixels all come from the same DataArray
+        ds = self.ds
+        data = self.input
+
+        if data.dtype.kind not in "biuf":
+            raise WhereConditionError(
+                f"Invalid where condition: {self.variable!r} is not numeric "
+                f"(dtype {data.dtype}), so it cannot be masked"
+            )
+
+        arrays: Dict[str, xr.DataArray] = {self.variable: data}
+        groups: Dict[str, List[WhereCondition]] = {}
+
+        for condition in conditions:
+            name = condition.variable
+            groups.setdefault(name, []).append(condition)
+
+            if name in arrays:
+                continue
+            # a mask may legitimately lack some of the request's dimensions
+            # (e.g. a time-invariant (y, x) mask under sel=time=...): apply
+            # only the selectors whose dimension the mask variable has
+            sel = [s for s in self.sel or [] if s.split("=", 1)[0] in ds[name].dims]
+            try:
+                da = get_variable(ds, name, sel=sel)
+            except (KeyError, AssertionError, ValueError) as e:
+                raise WhereConditionError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} cannot "
+                    f"mask {self.variable!r} for this request"
+                ) from e
+
+            if extra_dims := set(da.dims) - set(self.input.dims):
+                raise WhereConditionError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} has "
+                    f"dimensions {sorted(map(str, extra_dims))} that "
+                    f"{self.variable!r} does not"
+                )
+            # _read_window indexes each mask by the data's pixel positions,
+            # so a mask on an offset grid would silently mask the wrong
+            # pixels, and one on a coarser grid would fail on the first
+            # read. Reject coordinate mismatches instead.
+            # This only checks index coordinates. A scalar selection (e.g.
+            # sel=time=nearest::...) leaves `time` as a non-index
+            # coordinate, so a mask at a different time would still pass.
+            # That cannot happen here. The mask comes from the same dataset
+            # and uses the same `sel`, so both pick the same time.
+            try:
+                xr.align(data, da, join="exact")
+            except ValueError as e:
+                raise WhereConditionError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} "
+                    f"coordinates do not match {self.variable!r}'s"
+                ) from e
+
+            if da.dtype.kind not in "biuf":
+                raise WhereConditionError(
+                    f"Invalid where condition {condition.raw!r}: {name!r} is "
+                    f"not numeric (dtype {da.dtype})"
+                )
+            arrays[name] = da
+        masks = [(arrays[variable], group) for variable, group in groups.items()]
+        # copy(data=...) keeps coords, attrs and encoding (hence rio.nodata
+        # and the CRS) and stays lazy: the parent already derived
+        # bounds/transform from `data`, and this is the same array
+        self.input = data.copy(
+            data=indexing.LazilyIndexedArray(_MaskedArray(data, masks))
         )
 
     @classmethod

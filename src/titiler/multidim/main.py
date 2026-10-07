@@ -34,6 +34,7 @@ from titiler.xarray.extensions import DatasetMetadataExtension, ValidateExtensio
 from titiler.multidim import __version__ as titiler_version
 from titiler.multidim.extensions import open_metadata_dataset
 from titiler.multidim.factory import XarrayMosaicTilerFactory
+from titiler.multidim.reader import WhereConditionError
 from titiler.multidim.settings import ApiSettings
 
 logging.getLogger("botocore.credentials").disabled = True
@@ -114,6 +115,7 @@ TITILER_CONFORMS_TO.update(cmaps.conforms_to)
 
 error_codes = {
     zarr.errors.GroupNotFoundError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    WhereConditionError: status.HTTP_400_BAD_REQUEST,
     # service misconfiguration (no EDL identity available); messages are
     # sanitized at the raise site (earthdata.py, earthaccess-auth)
     LoginStrategyUnavailable: status.HTTP_500_INTERNAL_SERVER_ERROR,

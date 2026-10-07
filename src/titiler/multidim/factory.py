@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 from urllib.parse import unquote, urlencode, urlsplit, urlunsplit
 
@@ -77,6 +78,26 @@ def _is_url_allowed(url: str) -> bool:
         return False
 
 
+@dataclass
+class MultidimXarrayParams(XarrayParams):
+    """XarrayParams plus cross-variable masking."""
+
+    where: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "Mask the selected variable by numeric conditions on any "
+                "variable of the same dataset, `{variable}{op}{number}` "
+                "with op one of ==, !=, <, <=, >, >= "
+                "(e.g. `where=main_data_quality_flag==0`). Repeat the "
+                "parameter to AND conditions. Pixels failing any condition "
+                "render as nodata. URL-encode the value. In a URL, `+` means "
+                "a space, so write `1e5` or `1e%2B5`, not `1e+5`."
+            ),
+        ),
+    ] = None
+
+
 def DatasetPathParams(
     url: list[str] = Query(
         min_length=1,
@@ -101,7 +122,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
     backend: type[XarrayMosaicBackend] = XarrayMosaicBackend
     dataset_reader: type[XarrayReader] = XarrayReader
     path_dependency: Callable[..., list[str]] = DatasetPathParams
-    reader_dependency: type[DefaultDependency] = XarrayParams
+    reader_dependency: type[DefaultDependency] = MultidimXarrayParams
     layer_dependency: type[DefaultDependency] = BidxParams
     dataset_dependency: type[DefaultDependency] = DatasetParams
     img_part_dependency: type[DefaultDependency] = PartFeatureParams
