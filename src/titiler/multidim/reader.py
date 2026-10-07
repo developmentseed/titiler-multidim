@@ -468,6 +468,11 @@ class XarrayReader(Reader):
             # so a mask on an offset grid would silently mask the wrong
             # pixels, and one on a coarser grid would fail on the first
             # read. Reject coordinate mismatches instead.
+            # This only checks index coordinates. A scalar selection (e.g.
+            # sel=time=nearest::...) leaves `time` as a non-index
+            # coordinate, so a mask at a different time would still pass.
+            # That cannot happen here. The mask comes from the same dataset
+            # and uses the same `sel`, so both pick the same time.
             try:
                 xr.align(data, da, join="exact")
             except ValueError as e:
