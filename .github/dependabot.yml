@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: uv
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 7
     directory: "/"
@@ -8,6 +9,11 @@ updates:
       interval: monthly
     groups:
       all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
         patterns:
           - "*"
     commit-message:
@@ -21,6 +27,11 @@ updates:
       interval: monthly
     groups:
       all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
         patterns:
           - "*"
     commit-message:
