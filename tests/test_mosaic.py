@@ -314,6 +314,21 @@ def test_single_source_routes_open_dataset_once(app, opens, sources, route):
     assert opens == [str(first)]
 
 
+def test_backend_tiles_use_requested_tms(sources, reader_cls):
+    """A tile follows the backend's TMS, which reaches the readers when they open."""
+    import morecantile
+
+    _, _, first, _ = sources
+    tms = morecantile.tms.get("WGS1984Quad")
+    with XarrayMosaicBackend(
+        [str(first)], tms=tms, reader=reader_cls, reader_options={"variable": "data"}
+    ) as backend:
+        image, _ = backend.tile(0, 0, 0)
+
+    assert image.crs == tms.rasterio_crs
+    assert image.bounds == tms.xy_bounds(0, 0, 0)
+
+
 def test_mosaic_tile_opens_each_source_once(app, opens, sources):
     """A multi-URL tile opens every source exactly once."""
     _, _, first, second = sources
