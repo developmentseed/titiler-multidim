@@ -87,22 +87,26 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def count_storage_requests(monkeypatch) -> collections.Counter:
+def serve_counting(monkeypatch) -> tuple[socketserver.TCPServer, collections.Counter]:
     """Route local Icechunk repositories through a counting HTTP server.
 
-    Returns a Counter of icechunk storage requests keyed by kind (`repo`,
-    `config.yaml`, `refs`, `snapshots`, `manifests`, `chunks`), the unit the
-    performance roadmap's numbers are in. `opener_icechunk`
+    Returns the server and a Counter of icechunk storage requests keyed by
+    kind (`repo`, `config.yaml`, `refs`, `snapshots`, `manifests`, `chunks`),
+    the unit the performance roadmap's numbers are in. `opener_icechunk`
     builds `file://` storage with `icechunk.local_filesystem_storage`; that
     is patched to return `icechunk.http_storage` for the same directory,
-    served from the filesystem root so any local repository works.
+    served from the filesystem root so any local repository works. The
+    caller stops the server (`shutdown()`, then `server_close()`): the
+    `storage_requests` fixture in conftest.py does that on teardown.
     """
     handler = type(
         "CountingHandler", (_RangeHandler,), {"requests": collections.Counter()}
     )
     server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
     server.daemon_threads = True
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    ).start()
 
     def http_storage(path: str) -> icechunk.Storage:
         handler.root = os.path.abspath(path)
@@ -111,14 +115,14 @@ def count_storage_requests(monkeypatch) -> collections.Counter:
         )
 
     monkeypatch.setattr(icechunk, "local_filesystem_storage", http_storage)
-    return handler.requests
+    return server, handler.requests
 
 
 def count_opens(monkeypatch) -> collections.Counter:
     """Count repository opens (`local_filesystem_storage`) and `xr.open_dataset`.
 
-    Call after `count_storage_requests` if both are used: this wraps whatever
-    `icechunk.local_filesystem_storage` currently is.
+    Wraps whatever `icechunk.local_filesystem_storage` currently is, so it
+    composes with the `storage_requests` fixture (fixtures run first).
     """
     counts: collections.Counter = collections.Counter()
     storage, open_dataset = icechunk.local_filesystem_storage, xr.open_dataset

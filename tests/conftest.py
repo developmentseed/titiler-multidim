@@ -32,6 +32,17 @@ def app(monkeypatch):
         yield client
 
 
+@pytest.fixture
+def storage_requests(monkeypatch):
+    """Icechunk storage requests made by the test's local repositories, by kind."""
+    from helpers import serve_counting
+
+    server, counts = serve_counting(monkeypatch)
+    yield counts
+    server.shutdown()
+    server.server_close()
+
+
 @pytest.fixture(scope="session")
 def long_icechunk_store(tmp_path_factory) -> str:
     """Icechunk store with TEMPO's time axis length (17,228 steps) on an 8x8 grid.

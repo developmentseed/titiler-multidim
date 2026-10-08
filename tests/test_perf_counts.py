@@ -6,9 +6,10 @@ which performance-roadmap issue is expected to lower each number.
 """
 
 import shutil
+import socket
 
 import pytest
-from helpers import count_boto3_sessions, count_opens, count_storage_requests
+from helpers import count_boto3_sessions, count_opens, serve_counting
 
 NATIVE = {
     "url": "tests/fixtures/icechunk_native",
@@ -31,27 +32,33 @@ TIME = "2023-08-01T00:00:00"
     ids=["tile", "point", "info", "info_show_times"],
 )
 def test_opens_and_storage_requests(
-    app, monkeypatch, path, params, repository, dataset, metadata, chunks
+    app,
+    monkeypatch,
+    storage_requests,
+    path,
+    params,
+    repository,
+    dataset,
+    metadata,
+    chunks,
 ):
     """Opens and storage requests per request type, on `tests/fixtures/icechunk_native`."""
-    storage = count_storage_requests(monkeypatch)
     opens = count_opens(monkeypatch)
 
     assert app.get(path, params={**NATIVE, **params}).status_code == 200
 
     assert (opens["repository"], opens["dataset"]) == (repository, dataset)
-    assert storage["chunks"] == chunks
-    assert sum(storage.values()) - storage["chunks"] == metadata
+    assert storage_requests["chunks"] == chunks
+    assert sum(storage_requests.values()) - storage_requests["chunks"] == metadata
 
 
-def test_coordinate_chunk_fetches_per_open(app, monkeypatch, long_icechunk_store):
+def test_coordinate_chunk_fetches_per_open(app, storage_requests, long_icechunk_store):
     """Issue 6: icechunk's chunk cache is off, so the `time` chunk is read 3 times per open."""
-    storage = count_storage_requests(monkeypatch)
     params = {"url": long_icechunk_store, "variable": "data", "sel": f"time={TIME}"}
 
     assert app.get("/info", params=params).status_code == 200
 
-    assert storage["chunks"] == 3
+    assert storage_requests["chunks"] == 3
 
 
 @pytest.mark.parametrize(
@@ -73,14 +80,25 @@ def test_boto3_sessions(app, monkeypatch, path, sessions):
     assert counts["boto3.Session"] == sessions
 
 
-def test_storage_kinds_come_from_the_icechunk_key(app, monkeypatch, tmp_path):
+def test_storage_kinds_come_from_the_icechunk_key(app, storage_requests, tmp_path):
     """A `chunks/` or `repo/` directory above the store must not be counted as reads."""
     store = tmp_path / "chunks" / "repo"
     shutil.copytree("tests/fixtures/icechunk_native", store)
-    storage = count_storage_requests(monkeypatch)
 
     params = {**NATIVE, "url": str(store), "sel": "time=0"}
     assert app.get("/info", params=params).status_code == 200
 
-    assert storage["chunks"] == 0
-    assert sum(storage.values()) == 8
+    assert storage_requests["chunks"] == 0
+    assert sum(storage_requests.values()) == 8
+
+
+def test_counting_server_shuts_down(monkeypatch):
+    """`shutdown()` + `server_close()` stop the thread and free the port (fixture teardown)."""
+    server, _ = serve_counting(monkeypatch)
+    address = server.server_address
+
+    server.shutdown()
+    server.server_close()
+
+    with pytest.raises(ConnectionRefusedError):
+        socket.create_connection(address, timeout=1).close()
