@@ -4,6 +4,18 @@
 
 * nothing
 
+## [0.10.1](https://github.com/developmentseed/titiler-multidim/compare/v0.10.0...v0.10.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* open each dataset once per request ([#171](https://github.com/developmentseed/titiler-multidim/issues/171)) ([5755761](https://github.com/developmentseed/titiler-multidim/commit/5755761ac379fe9560986ca807d83247233784e2))
+
+
+### Performance Improvements
+
+* build the /info times list from time.values ([#194](https://github.com/developmentseed/titiler-multidim/issues/194)) ([07e71d0](https://github.com/developmentseed/titiler-multidim/commit/07e71d0630f3e0ea601d666867d234bbdc8db407))
+
 ## [0.10.0](https://github.com/developmentseed/titiler-multidim/compare/v0.9.1...v0.10.0) (2026-10-07)
 
 
