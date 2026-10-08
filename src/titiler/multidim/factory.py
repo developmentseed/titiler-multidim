@@ -1,13 +1,15 @@
 """TiTiler Xarray mosaic factory."""
 
+import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode, urlsplit, urlunsplit
 
 import jinja2
 import numpy as np
 from attrs import define
-from fastapi import Depends, Path, Query
+from fastapi import Depends, HTTPException, Path, Query
 from geojson_pydantic.features import Feature
 from rio_tiler.constants import WGS84_CRS
 from rio_tiler.models import Info
@@ -35,7 +37,65 @@ from titiler.xarray.dependencies import (
 )
 
 from titiler.multidim.mosaic import XarrayMosaicBackend
-from titiler.multidim.reader import XarrayReader
+from titiler.multidim.reader import XarrayReader, api_settings
+
+
+def _normalize_url(url: str) -> str:
+    """Lowercase scheme and host and end the path with "/" for prefix matching.
+
+    The trailing "/" makes prefixes match whole path segments: "s3://b/a/"
+    must not admit "s3://b/abc". "." and ".." segments raise ValueError rather
+    than being resolved: S3 keeps them literally while HTTP servers resolve
+    them, so no single resolution is safe. Bare (and relative) paths become
+    absolute file:// urls, so "/data/x" and "file:///data/x" match alike.
+    """
+    parts = urlsplit(url)
+    segments = unquote(parts.path).split("/")
+    if "." in segments or ".." in segments:
+        raise ValueError(f"'.' or '..' path segment in {url!r}")
+    if not parts.scheme:
+        parts = urlsplit(f"file://{os.path.abspath(url)}")
+    return urlunsplit(
+        parts._replace(
+            scheme=parts.scheme.lower(),
+            netloc=parts.netloc.lower(),
+            path=parts.path.rstrip("/") + "/",
+        )
+    )
+
+
+# a bad configured prefix raises here, failing startup instead of being dropped
+_allowed_prefixes = tuple(_normalize_url(p) for p in api_settings.allowed_url_prefixes)
+
+
+def _is_url_allowed(url: str) -> bool:
+    """True if no prefixes are configured or url lies under one of them."""
+    if not _allowed_prefixes:
+        return True
+    try:
+        return _normalize_url(url).startswith(_allowed_prefixes)
+    except ValueError:
+        return False
+
+
+@dataclass
+class MultidimXarrayParams(XarrayParams):
+    """XarrayParams plus cross-variable masking."""
+
+    where: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "Mask the selected variable by numeric conditions on any "
+                "variable of the same dataset, `{variable}{op}{number}` "
+                "with op one of ==, !=, <, <=, >, >= "
+                "(e.g. `where=main_data_quality_flag==0`). Repeat the "
+                "parameter to AND conditions. Pixels failing any condition "
+                "render as nodata. URL-encode the value. In a URL, `+` means "
+                "a space, so write `1e5` or `1e%2B5`, not `1e+5`."
+            ),
+        ),
+    ] = None
 
 
 def DatasetPathParams(
@@ -46,6 +106,12 @@ def DatasetPathParams(
     ),
 ) -> list[str]:
     """Return the ordered Xarray source URLs."""
+    for u in url:
+        if not _is_url_allowed(u):
+            raise HTTPException(
+                status_code=400,
+                detail=f"url not permitted: {u.split('?', maxsplit=1)[0]}",
+            )
     return url
 
 
@@ -56,7 +122,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
     backend: type[XarrayMosaicBackend] = XarrayMosaicBackend
     dataset_reader: type[XarrayReader] = XarrayReader
     path_dependency: Callable[..., list[str]] = DatasetPathParams
-    reader_dependency: type[DefaultDependency] = XarrayParams
+    reader_dependency: type[DefaultDependency] = MultidimXarrayParams
     layer_dependency: type[DefaultDependency] = BidxParams
     dataset_dependency: type[DefaultDependency] = DatasetParams
     img_part_dependency: type[DefaultDependency] = PartFeatureParams
@@ -107,9 +173,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
                     ) as source:
                         if "time" in source.input.dims:
                             info["count"] = len(source.input.time)
-                            info["times"] = [
-                                str(value.data) for value in source.input.time
-                            ]
+                            info["times"] = [str(t) for t in source.input.time.values]
             return info
 
         @self.router.get(

@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
 ]
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
     "titiler-core>=2.4.0,<3.0",
     "titiler-xarray>=2.4.0,<3.0",
@@ -53,8 +53,8 @@ server = [
     "uvicorn"
 ]
 lambda = [
-    "mangum==0.21.0",
-    "aiobotocore>=2.24.0,<3.9.1",
+    "mangum==0.22.0",
+    "aiobotocore>=2.24.0,<3.9.2",
     "opentelemetry-exporter-otlp-proto-http>=1.40.0",
     "opentelemetry-instrumentation-fastapi>=0.61b0",
     "opentelemetry-instrumentation-logging>=0.61b0",
@@ -65,7 +65,6 @@ lambda = [
 
 [dependency-groups]
 dev = [
-    "dask>=2026.3.0",
     "httpx2",
     "ipykernel>=7.2.0",
     "ipython>=9.13.0",
@@ -81,7 +80,7 @@ dev = [
     "virtualizarr",
 ]
 deployment = [
-    "aws-cdk-lib==2.266.0",
+    "aws-cdk-lib==2.271.0",
     "constructs>=10.5.0,<11.0.0",
     "pydantic-settings~=2.14",
     "python-dotenv>=1.2.2",

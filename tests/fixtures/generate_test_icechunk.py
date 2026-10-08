@@ -43,10 +43,10 @@ GWETPROF = xr.DataArray(
 # Create dataset
 ds = xr.Dataset(
     {
-        "CDD0": CDD0.chunk(chunk_size),
-        "DISPH": DISPH.chunk(chunk_size),
-        "FROST_DAYS": FROST_DAYS.chunk(chunk_size),
-        "GWETPROF": GWETPROF.chunk(chunk_size),
+        "CDD0": CDD0,
+        "DISPH": DISPH,
+        "FROST_DAYS": FROST_DAYS,
+        "GWETPROF": GWETPROF,
     },
     coords={"time": time, "lat": lat, "lon": lon},
 )
@@ -56,5 +56,9 @@ repo = ic.Repository.create(storage=storage, config=config)
 session = repo.writable_session("main")
 store = session.store
 
-ds.to_zarr(store, consolidated=False)
+ds.to_zarr(
+    store,
+    consolidated=False,
+    encoding={name: {"chunks": tuple(chunk_size.values())} for name in ds.data_vars},
+)
 session.commit("Add initial data")
