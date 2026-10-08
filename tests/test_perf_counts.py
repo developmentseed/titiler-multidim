@@ -5,6 +5,8 @@ assertion, and that diff is the PR's request-count report. The comments say
 which performance-roadmap issue is expected to lower each number.
 """
 
+import shutil
+
 import pytest
 from helpers import count_boto3_sessions, count_opens, count_storage_requests
 
@@ -70,3 +72,16 @@ def test_boto3_sessions(app, monkeypatch, path, sessions):
     assert app.get(path, params={**NATIVE, "sel": "time=0"}).status_code == 200
 
     assert counts["boto3.Session"] == sessions
+
+
+def test_storage_kinds_come_from_the_icechunk_key(app, monkeypatch, tmp_path):
+    """A `chunks/` or `repo/` directory above the store must not be counted as reads."""
+    store = tmp_path / "chunks" / "repo"
+    shutil.copytree("tests/fixtures/icechunk_native", store)
+    storage = count_storage_requests(monkeypatch)
+
+    params = {**NATIVE, "url": str(store), "sel": "time=0"}
+    assert app.get("/info", params=params).status_code == 200
+
+    assert storage["chunks"] == 0
+    assert sum(storage.values()) == 8

@@ -37,9 +37,10 @@ def long_icechunk_store(tmp_path_factory) -> str:
     """Icechunk store with TEMPO's time axis length (17,228 steps) on an 8x8 grid.
 
     Data is chunked coarsely: one chunk per step takes ~8 s to write and 17k
-    files, and nothing here depends on it. The `time` coordinate is a single
-    ~138 KB chunk, so it is fetched from storage rather than inlined in the
-    manifest.
+    files, and nothing here depends on it. The `time` coordinate is the only
+    chunk object in the store (~18 KB stored): the all-zero data chunks
+    compress below icechunk's inline threshold and live in the manifest, so
+    tile and point requests on this store never fetch a data chunk.
     """
     import icechunk
     import numpy as np

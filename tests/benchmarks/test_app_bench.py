@@ -24,7 +24,12 @@ TIME = "2023-08-01T00:00:00"
     ids=["info_sel", "info_no_sel", "info_show_times", "tile_z2", "point"],
 )
 def test_request(benchmark, app, long_icechunk_store, path, params):
-    """One request, cold: every round opens the store again (as on main)."""
+    """One request, cold: every round opens the store again (as on main).
+
+    The data chunks are inlined in the manifest (see the fixture), so the
+    tile and point cases measure the open and request path, not chunk
+    fetches; the chunk counts live in tests/test_perf_counts.py.
+    """
     query = {"url": long_icechunk_store, "variable": "data", **params}
 
     def run():

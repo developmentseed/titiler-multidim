@@ -27,5 +27,5 @@ Paste that table into the PR's **Performance** section, together with the
 diff of `tests/test_perf_counts.py` if the PR changed any pinned count
 (opens, storage requests or boto3 sessions per request). Medians under
 ~20 ms move by a few percent between runs; call a change real only when it
-is well outside that. Benchmarks need no `-n`: pytest-benchmark turns
-itself off under xdist.
+is well outside that. Do not pass `-n`: pytest-benchmark refuses
+`--benchmark-only` under xdist.

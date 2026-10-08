@@ -40,8 +40,7 @@ def find_string_in_stream(response: httpx.Response, target: str) -> bool:
 # module, so a patch on a reader module imported earlier lands on a dead copy.
 
 
-STORAGE_KINDS = ("repo", "config.yaml", "refs", "snapshots", "manifests", "chunks")
-_STORAGE_KIND = re.compile(rf"/({'|'.join(map(re.escape, STORAGE_KINDS))})(/|$)")
+_COUNT_LOCK = threading.Lock()  # icechunk reads in parallel; Counter += is not atomic
 
 
 class _RangeHandler(http.server.SimpleHTTPRequestHandler):
@@ -52,6 +51,7 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
     """
 
     requests: collections.Counter
+    root: str  # the store directory, set when a repository is opened
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory="/", **kwargs)
@@ -60,8 +60,11 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if match := _STORAGE_KIND.search(self.path):
-            self.requests[match[1]] += 1
+        # classify by the icechunk key under the store root (repo, config.yaml,
+        # refs, snapshots, manifests, chunks), never by the checkout path
+        key = self.path.removeprefix(self.root).lstrip("/")
+        with _COUNT_LOCK:
+            self.requests[key.split("/", 1)[0]] += 1
         path = self.translate_path(self.path)
         if not os.path.isfile(path):
             self.send_error(404)
@@ -87,8 +90,9 @@ class _RangeHandler(http.server.SimpleHTTPRequestHandler):
 def count_storage_requests(monkeypatch) -> collections.Counter:
     """Route local Icechunk repositories through a counting HTTP server.
 
-    Returns a Counter of icechunk storage requests keyed by `STORAGE_KINDS`,
-    the unit the performance roadmap's numbers are in. `opener_icechunk`
+    Returns a Counter of icechunk storage requests keyed by kind (`repo`,
+    `config.yaml`, `refs`, `snapshots`, `manifests`, `chunks`), the unit the
+    performance roadmap's numbers are in. `opener_icechunk`
     builds `file://` storage with `icechunk.local_filesystem_storage`; that
     is patched to return `icechunk.http_storage` for the same directory,
     served from the filesystem root so any local repository works.
@@ -99,13 +103,14 @@ def count_storage_requests(monkeypatch) -> collections.Counter:
     server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    monkeypatch.setattr(
-        icechunk,
-        "local_filesystem_storage",
-        lambda path: icechunk.http_storage(
-            f"http://127.0.0.1:{server.server_address[1]}{os.path.abspath(path)}/"
-        ),
-    )
+
+    def http_storage(path: str) -> icechunk.Storage:
+        handler.root = os.path.abspath(path)
+        return icechunk.http_storage(
+            f"http://127.0.0.1:{server.server_address[1]}{handler.root}/"
+        )
+
+    monkeypatch.setattr(icechunk, "local_filesystem_storage", http_storage)
     return handler.requests
 
 
@@ -134,8 +139,9 @@ def count_opens(monkeypatch) -> collections.Counter:
 def count_boto3_sessions(monkeypatch) -> collections.Counter:
     """Count `boto3.Session()` constructions, as rasterio's `AWSSession` makes them.
 
-    rasterio only builds one when `AWS_ACCESS_KEY_ID` is in the environment
-    (always on Lambda, never in CI), so this also sets fake credentials.
+    rasterio only builds one when `AWS_ACCESS_KEY_ID` and
+    `AWS_SECRET_ACCESS_KEY` are both in the environment (always on Lambda,
+    never in CI), so this also sets fake credentials.
     """
     counts: collections.Counter = collections.Counter()
     init = boto3.session.Session.__init__
