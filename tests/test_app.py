@@ -257,6 +257,21 @@ def test_sel_nearest_netcdf(app):
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize("store", ["netcdf_store", "zarr_store_v2"])
+def test_info_show_times(app, store):
+    """`show_times` lists every time step as a string, decoded or not."""
+    import xarray as xr
+
+    params = {k: v for k, v in store_params[store]["params"].items() if k != "sel"}
+    response = app.get("/info", params={**params, "show_times": True})
+    assert response.status_code == 200
+
+    with xr.open_dataset(params["url"], decode_times=params["decode_times"]) as ds:
+        expected = [str(value.data) for value in ds.time]
+    assert response.json()["count"] == len(expected)
+    assert response.json()["times"] == expected
+
+
 def test_earthdata_exception_handlers_registered(app):
     from earthaccess_auth.exceptions import (
         LoginStrategyUnavailable,

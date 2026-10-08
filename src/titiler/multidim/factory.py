@@ -171,7 +171,7 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
                     source = src._readers[src_path[0]]
                     if "time" in source.input.dims:
                         info["count"] = len(source.input.time)
-                        info["times"] = [str(value.data) for value in source.input.time]
+                        info["times"] = [str(t) for t in source.input.time.values]
             return info
 
         @self.router.get(
