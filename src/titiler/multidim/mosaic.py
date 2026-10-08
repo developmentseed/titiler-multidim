@@ -23,31 +23,30 @@ class XarrayMosaicBackend(BaseBackend):
     _asset_bounds: list[BBox] = attr.ib(init=False, factory=list)
     _asset_info: list[dict[str, Any]] = attr.ib(init=False, factory=list)
     _readers: dict[str, Any] = attr.ib(init=False, factory=dict)
+    _exit_stack: contextlib.ExitStack = attr.ib(init=False)
 
     def __attrs_post_init__(self) -> None:
         """Open and validate every source, keeping its reader for the request."""
         if not 1 <= len(self.input) <= 20:
             raise BadRequestError("Provide between one and twenty url parameters.")
 
-        try:
-            self._open_sources()
-        except BaseException:
-            self.close()
-            raise
+        with contextlib.ExitStack() as stack:
+            self._open_sources(stack)
+            self._exit_stack = stack.pop_all()
 
         # The following prevents rio-tiler's with statements from closing
         # the dataset. The mosaic backend controls opening/closing instead,
         # so the dataset only needs to be opened once and can be shared.
         self.reader = lambda asset, **_: contextlib.nullcontext(self._readers[asset])  # type: ignore[assignment]
 
-    def _open_sources(self) -> None:
+    def _open_sources(self, stack: contextlib.ExitStack) -> None:
         """Open each distinct source once and reject incompatible ones."""
         signature: tuple[Any, ...] | None = None
         zooms: list[tuple[int, int]] = []
         for asset in self.input:
             if asset not in self._readers:
-                self._readers[asset] = self.reader(
-                    asset, tms=self.tms, **self.reader_options
+                self._readers[asset] = stack.enter_context(
+                    self.reader(asset, tms=self.tms, **self.reader_options)
                 )
             src = self._readers[asset]
             info = src.info().model_dump()
@@ -77,8 +76,7 @@ class XarrayMosaicBackend(BaseBackend):
 
     def close(self) -> None:
         """Close every reader this backend opened."""
-        for src in self._readers.values():
-            src.close()
+        self._exit_stack.close()
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Close the readers when the request's `with` block ends."""
