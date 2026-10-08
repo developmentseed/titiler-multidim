@@ -1,5 +1,6 @@
 """Request-scoped Xarray mosaic backend."""
 
+import contextlib
 from typing import Any
 
 import attr
@@ -21,40 +22,69 @@ class XarrayMosaicBackend(BaseBackend):
 
     _asset_bounds: list[BBox] = attr.ib(init=False, factory=list)
     _asset_info: list[dict[str, Any]] = attr.ib(init=False, factory=list)
+    _readers: dict[str, Any] = attr.ib(init=False, factory=dict)
+    _exit_stack: contextlib.ExitStack = attr.ib(init=False)
 
     def __attrs_post_init__(self) -> None:
-        """Validate every requested source and collect its geographic metadata."""
+        """Open and validate every source, keeping its reader for the request."""
         if not 1 <= len(self.input) <= 20:
             raise BadRequestError("Provide between one and twenty url parameters.")
 
+        with contextlib.ExitStack() as stack:
+            self._open_sources(stack)
+            self._exit_stack = stack.pop_all()
+
+        # Route rio-tiler's reader calls to the readers opened above, wrapped
+        # in nullcontext so rio-tiler's with statements leave them open. The
+        # backend controls opening/closing instead, so each dataset is opened
+        # once and shared. The lambda captures `readers` rather than `self`,
+        # because capturing `self` would make a reference cycle that keeps the
+        # backend and its datasets in memory until garbage collection.
+        readers = self._readers
+        self.reader = lambda asset, **_: contextlib.nullcontext(readers[asset])  # type: ignore[assignment]
+
+    def _open_sources(self, stack: contextlib.ExitStack) -> None:
+        """Open each distinct source once and reject incompatible ones."""
         signature: tuple[Any, ...] | None = None
         zooms: list[tuple[int, int]] = []
         for asset in self.input:
-            with self.reader(asset, tms=self.tms, **self.reader_options) as src:
-                info = src.info().model_dump()
-                current = (
-                    str(src.input.dtype),
-                    src.input.rio.count,
-                    tuple(
-                        dimension
-                        for dimension in src.input.dims
-                        if dimension not in {src.input.rio.x_dim, src.input.rio.y_dim}
-                    ),
-                    repr(info["band_metadata"]),
-                    info["nodata_type"],
+            if asset not in self._readers:
+                self._readers[asset] = stack.enter_context(
+                    self.reader(asset, tms=self.tms, **self.reader_options)
                 )
-                if signature is not None and current != signature:
-                    raise BadRequestError("Requested Xarray sources are incompatible.")
+            src = self._readers[asset]
+            info = src.info().model_dump()
+            current = (
+                str(src.input.dtype),
+                src.input.rio.count,
+                tuple(
+                    dimension
+                    for dimension in src.input.dims
+                    if dimension not in {src.input.rio.x_dim, src.input.rio.y_dim}
+                ),
+                repr(info["band_metadata"]),
+                info["nodata_type"],
+            )
+            if signature is not None and current != signature:
+                raise BadRequestError("Requested Xarray sources are incompatible.")
 
-                signature = current
-                self._asset_bounds.append(src.get_geographic_bounds(WGS84_CRS))
-                self._asset_info.append(info)
-                zooms.append((src.minzoom, src.maxzoom))
+            signature = current
+            self._asset_bounds.append(src.get_geographic_bounds(WGS84_CRS))
+            self._asset_info.append(info)
+            zooms.append((src.minzoom, src.maxzoom))
 
         self.crs = WGS84_CRS
         self.bounds = self._mosaic_bounds()
         self.minzoom = min(zoom[0] for zoom in zooms)
         self.maxzoom = max(zoom[1] for zoom in zooms)
+
+    def close(self) -> None:
+        """Close every reader this backend opened."""
+        self._exit_stack.close()
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Close the readers when the request's `with` block ends."""
+        self.close()
 
     def info(self) -> dict[str, Any]:  # type: ignore[override]
         """Return native metadata for one source or shared metadata for a mosaic.

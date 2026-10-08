@@ -168,12 +168,10 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
             ) as src:
                 info = src.info()
                 if show_times and len(src_path) == 1:
-                    with self.dataset_reader(
-                        src_path[0], **reader_params.as_dict()
-                    ) as source:
-                        if "time" in source.input.dims:
-                            info["count"] = len(source.input.time)
-                            info["times"] = [str(t) for t in source.input.time.values]
+                    source = src._readers[src_path[0]]
+                    if "time" in source.input.dims:
+                        info["count"] = len(source.input.time)
+                        info["times"] = [str(t) for t in source.input.time.values]
             return info
 
         @self.router.get(
