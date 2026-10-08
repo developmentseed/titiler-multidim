@@ -21,13 +21,12 @@ TIME = "2023-08-01T00:00:00"
 @pytest.mark.parametrize(
     ("path", "params", "repository", "dataset", "metadata", "chunks"),
     [
-        # #171 opens each dataset once per request (2 -> 1);
-        # Issue 5 keeps it open across requests (-> 0, metadata -> 1 branch-ref check);
+        # Issue 5 keeps the dataset open across requests (-> 0, metadata -> 1 branch-ref check);
         # Issue 8 serves repeated chunks from memory (chunks -> 0 on a repeat).
-        ("/tiles/WebMercatorQuad/2/1/1.png", {"sel": "time=0"}, 2, 2, 17, 9),
-        ("/point/-95,35", {"sel": "time=0"}, 2, 2, 17, 1),
+        ("/tiles/WebMercatorQuad/2/1/1.png", {"sel": "time=0"}, 1, 1, 9, 9),
+        ("/point/-95,35", {"sel": "time=0"}, 1, 1, 9, 1),
         ("/info", {"sel": "time=0"}, 1, 1, 8, 0),
-        ("/info", {"show_times": True}, 2, 2, 16, 0),
+        ("/info", {"show_times": True}, 1, 1, 8, 0),
     ],
     ids=["tile", "point", "info", "info_show_times"],
 )
