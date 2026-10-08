@@ -34,10 +34,14 @@ class XarrayMosaicBackend(BaseBackend):
             self._open_sources(stack)
             self._exit_stack = stack.pop_all()
 
-        # The following prevents rio-tiler's with statements from closing
-        # the dataset. The mosaic backend controls opening/closing instead,
-        # so the dataset only needs to be opened once and can be shared.
-        self.reader = lambda asset, **_: contextlib.nullcontext(self._readers[asset])  # type: ignore[assignment]
+        # Route rio-tiler's reader calls to the readers opened above, wrapped
+        # in nullcontext so rio-tiler's with statements leave them open. The
+        # backend controls opening/closing instead, so each dataset is opened
+        # once and shared. The lambda captures `readers` rather than `self`,
+        # because capturing `self` would make a reference cycle that keeps the
+        # backend and its datasets in memory until garbage collection.
+        readers = self._readers
+        self.reader = lambda asset, **_: contextlib.nullcontext(readers[asset])  # type: ignore[assignment]
 
     def _open_sources(self, stack: contextlib.ExitStack) -> None:
         """Open each distinct source once and reject incompatible ones."""
