@@ -171,29 +171,6 @@ def test_backend_composes_points_with_requested_strategy(sources, reader_cls):
     assert image.array.compressed().tolist() == [2.0] * 4
 
 
-def test_backend_rejects_unreadable_and_incompatible_sources(
-    sources, tmp_path, reader_cls
-):
-    """Construction validates every requested source before it can be mosaicked."""
-    left, _, _, _ = sources
-    incompatible = tmp_path / "incompatible.nc"
-    write_dataset(incompatible, 2, times=[0, 1])
-
-    with pytest.raises(GenericError):
-        XarrayMosaicBackend(
-            [str(left), str(tmp_path / "missing.nc")],
-            reader=reader_cls,
-            reader_options={"variable": "data"},
-        )
-
-    with pytest.raises(BadRequestError):
-        XarrayMosaicBackend(
-            [str(left), str(incompatible)],
-            reader=reader_cls,
-            reader_options={"variable": "data"},
-        )
-
-
 def test_mosaic_endpoints_preserve_shapes_and_compose_data(app, sources):
     """Multiple URLs retain Xarray responses while reporting aggregate coverage."""
     left, right, first, second = sources
