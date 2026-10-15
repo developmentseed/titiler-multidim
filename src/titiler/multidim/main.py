@@ -2,6 +2,7 @@
 
 import logging
 import os
+from pathlib import Path
 from typing import Annotated, Literal
 
 import icechunk
@@ -13,11 +14,13 @@ from earthaccess_auth.exceptions import (
     S3CredentialsRequestFailure,
 )
 from fastapi import FastAPI, Query
+from rio_tiler.colormap import cmap as default_cmap
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.templating import Jinja2Templates
+from titiler.core.dependencies import create_colormap_dependency
 from titiler.core.errors import DEFAULT_STATUS_CODES, add_exception_handlers
 from titiler.core.factory import AlgorithmFactory, ColorMapFactory, TMSFactory
 from titiler.core.middleware import (
@@ -80,8 +83,16 @@ TITILER_CONFORMS_TO = {
 }
 
 ###############################################################################
+# Custom colormaps, registered by file name (see cmap_data/README.md)
+cmap = default_cmap.register(
+    {f.stem: str(f) for f in (Path(__file__).parent / "cmap_data").glob("*.npy")}
+)
+ColorMapParams = create_colormap_dependency(cmap)
+
+###############################################################################
 # Tiles endpoints
 xarray_factory = XarrayMosaicTilerFactory(
+    colormap_dependency=ColorMapParams,
     enable_telemetry=api_settings.telemetry_enabled,
     extensions=[
         DatasetMetadataExtension(dataset_opener=open_metadata_dataset),
@@ -106,7 +117,7 @@ TITILER_CONFORMS_TO.update(algorithms.conforms_to)
 
 ###############################################################################
 # Colormaps endpoints
-cmaps = ColorMapFactory(templates=templates)
+cmaps = ColorMapFactory(supported_colormaps=cmap, templates=templates)
 app.include_router(
     cmaps.router,
     tags=["ColorMaps"],
