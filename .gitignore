@@ -114,3 +114,4 @@ dev-docs/brainstorms/
 dev-docs/plans/
 
 .worktrees/
+.benchmarks/
