@@ -1,4 +1,5 @@
 {
+  "name": "AQI O3 8hr breakpoints gradient",
   "source": "NOAA Air Quality Forecast Guidance Viewer ozone ramp (ppb), one color per 10 ppb, sampled by hand from the provider's screenshot in the referenced pull request",
   "reference": "https://github.com/NASA-IMPACT/veda-backend/pull/665",
   "notes": "Sampled from a screenshot, not from a provider color table. The provider's stated intent (Air-Quality-Portal/aq-arch#192) is category boundaries at the EPA breakpoints (54, 70, 85, 105, 200 ppb) with a gradient inside each category; these stops do not change color exactly at those breakpoints. Replace them when the provider supplies the table.",
