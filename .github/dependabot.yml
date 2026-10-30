@@ -20,7 +20,9 @@ updates:
       prefix: "chore(deps):"
 
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     cooldown:
       default-days: 7
     schedule:

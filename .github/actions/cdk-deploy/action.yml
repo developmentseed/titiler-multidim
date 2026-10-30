@@ -22,11 +22,11 @@ runs:
   using: "composite"
   steps:
     - name: Install node and related deps
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: 22
 
-    - uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3.5.0
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       env:
           cache-name: cache-node-modules
       with:
@@ -35,7 +35,7 @@ runs:
           hashFiles('**/package-lock.json') }}
 
     - name: Install uv
-      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         version: "0.11.*"
 
