@@ -1,4 +1,5 @@
 {
+  "name": "worldview_rainbow_4",
   "source": "NASA Worldview custom palette \"Rainbow 4\" (255 colors), verbatim at the referenced commit, with the top color repeated to fill row 255",
   "reference": "https://github.com/nasa-gibs/worldview/blob/7d16ee53eb38a90fe66c9860015b51094c96ed25/config/default/common/config/palettes-custom.json/rainbow_4.json",
   "stops": {
