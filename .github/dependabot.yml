@@ -19,6 +19,15 @@ updates:
     commit-message:
       prefix: "chore(deps):"
 
+  - package-ecosystem: npm
+    directory: "/infrastructure/aws"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps):"
+
   - package-ecosystem: "github-actions"
     directories:
       - "/"
