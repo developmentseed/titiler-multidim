@@ -47,3 +47,17 @@ updates:
           - "*"
     commit-message:
       prefix: "ci(deps):"
+
+
+  - package-ecosystem: pre-commit
+    directory: "/"
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: monthly
+    groups:
+      all:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps):"
