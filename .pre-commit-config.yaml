@@ -9,14 +9,22 @@ repos:
     hooks:
       - id: validate-pyproject
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.1
+  # ruff runs from the project environment, so uv.lock alone sets its version.
+  # The hook definitions mirror astral-sh/ruff-pre-commit's.
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
-        exclude: ^notebooks/
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: ruff-format
-        exclude: ^notebooks/
+        name: ruff format
+        entry: uv run --frozen ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter, markdown]
+        require_serial: true
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.15.0
@@ -31,8 +39,3 @@ repos:
         - types-requests
         - boto3-stubs
         - types-aiobotocore
-
-  - repo: https://github.com/tsvikas/sync-with-uv
-    rev: d8fd0541c438ea27c42f23f85e68684893db6fb2 # v0.5.0
-    hooks:
-      - id: sync-with-uv

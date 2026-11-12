@@ -22,7 +22,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
-      - uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run pre-commit
+        run: uv run --frozen pre-commit run --all-files --verbose --show-diff-on-failure
 
   test:
     runs-on: ubuntu-latest
@@ -44,10 +48,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-extras
-
-      - name: Run pre-commit
-        if: matrix.python-version == '3.14'
-        run: uv run pre-commit run --all-files --verbose --show-diff-on-failure
 
       - name: Run tests
         run: uv run pytest -n auto
