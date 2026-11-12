@@ -48,7 +48,6 @@ updates:
     commit-message:
       prefix: "ci(deps):"
 
-
   - package-ecosystem: pre-commit
     directory: "/"
     cooldown:
