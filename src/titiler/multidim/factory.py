@@ -218,8 +218,8 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
         )
         def tilejson(
             request: Request,
-            tileMatrixSetId: Annotated[  # type: ignore
-                Literal[tuple(self.supported_tms.list())],
+            tileMatrixSetId: Annotated[
+                Literal[tuple(self.supported_tms.list())],  # type: ignore
                 Path(description="Identifier selecting a supported TileMatrixSetId."),
             ],
             tilesize: Annotated[
@@ -407,8 +407,8 @@ class XarrayMosaicTilerFactory(MosaicTilerFactory):
         @self.router.get("/{tileMatrixSetId}/map.html", response_class=HTMLResponse)
         def map_viewer(
             request: Request,
-            tileMatrixSetId: Annotated[  # type: ignore
-                Literal[tuple(self.supported_tms.list())],
+            tileMatrixSetId: Annotated[
+                Literal[tuple(self.supported_tms.list())],  # type: ignore
                 "Identifier selecting one of the supported TileMatrixSetIds",
             ],
             url: Annotated[
