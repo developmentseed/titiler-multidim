@@ -78,18 +78,19 @@ TileJSON URLs work in map clients unchanged.
 ## Custom colormaps
 
 Besides rio-tiler's built-in colormaps, this service registers every
-`src/titiler/multidim/cmap_data/<name>.json` file as colormap `<name>`. Each
-file records its `source`, a `reference` URL, any `notes` on its limits, and
-either color `stops` at data values or `breakpoints` onto another file's stops;
-`colormaps.py` interpolates it into a 256-row table. titiler applies that table **after**
+`src/titiler/multidim/cmap_data/*.json` file as the colormap given by its
+`name` field. Each file also records its `source`, a `reference` URL, any
+`notes` on its limits, and either color `stops` at data values or `breakpoints`
+onto another colormap's stops; `colormaps.py` interpolates it into a 256-row
+table. titiler applies that table **after**
 `rescale` stretches the data to 0-255, so each colormap is only meaningful with
 the `rescale` listed below.
 
 | `colormap_name` | What it is | Use with |
 |---|---|---|
 | [`worldview_rainbow_4`](src/titiler/multidim/cmap_data/worldview_rainbow_4.json) | NASA Worldview's "Rainbow 4" palette | the value range you would set in Worldview, e.g. `rescale=0,2e16` for TEMPO NO2 tropospheric column in molecules/cm² |
-| [`naqfc_o3`](src/titiler/multidim/cmap_data/naqfc_o3.json) | NOAA Air Quality Forecast Guidance Viewer ozone ramp | `rescale=0,200` for data in ppb, `rescale=0,0.2` for ppm |
-| [`naqfc_pm25`](src/titiler/multidim/cmap_data/naqfc_pm25.json) | the ozone ramp, stretched so each EPA PM2.5 AQI category gets its ozone category's colors | `rescale=0,225.4` for data in µg/m³ |
+| [`AQI O3 8hr breakpoints gradient`](src/titiler/multidim/cmap_data/aqi_o3_8hr_breakpoint_gradient.json) | NOAA Air Quality Forecast Guidance Viewer ozone ramp | `rescale=0,200` for data in ppb, `rescale=0,0.2` for ppm |
+| [`AQI PM2.5 24hr breakpoints gradient`](src/titiler/multidim/cmap_data/aqi_pm25_24hr_breakpoint_gradient.json) | the ozone ramp, stretched so each EPA PM2.5 AQI category gets its ozone category's colors | `rescale=0,225.4` for data in µg/m³ |
 
 Every custom colormap places category boundaries to the nearest 1/255 of the
 `rescale` range (0.8 ppb for ozone, 0.9 µg/m³ for PM2.5), and gives values
