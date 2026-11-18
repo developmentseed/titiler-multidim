@@ -1,12 +1,12 @@
 """Custom colormaps, registered alongside rio-tiler's built-ins.
 
-Every ``cmap_data/<name>.json`` file is registered as colormap ``<name>``. Each
-file has a ``source``, a ``reference`` URL for it, optional ``notes`` on its
-limits, and either:
+Every ``cmap_data/*.json`` file is registered as the colormap given by its
+``name``. Each file has a ``source``, a ``reference`` URL for it, optional
+``notes`` on its limits, and either:
 
 - ``stops``: data values mapped to ``#rrggbb`` colors, or
-- ``ramp`` and ``breakpoints``: another file's name, and data values mapped to
-  values on that file's stops.
+- ``ramp`` and ``breakpoints``: another colormap's ``name``, and data values
+  mapped to values on that colormap's stops.
 
 Each colormap is a 256-row table spanning its smallest to largest data value,
 which titiler applies after ``rescale`` stretches the data to 0-255, so each one
@@ -66,10 +66,19 @@ def _build(spec: Mapping[str, Any], specs: Mapping[str, Any]) -> GDALColorMapTyp
     return _colormap_from_ramp(specs[spec["ramp"]]["stops"], ramp_values)
 
 
-SPECS: dict[str, Any] = {
-    path.name.removesuffix(".json"): json.loads(path.read_text())
-    for path in (files(__package__) / "cmap_data").iterdir()
-    if path.name.endswith(".json")
-}
+def _load_specs() -> dict[str, Any]:
+    """Read every ``cmap_data`` file, keyed by its ``name``."""
+    specs: dict[str, Any] = {}
+    for path in (files(__package__) / "cmap_data").iterdir():
+        if not path.name.endswith(".json"):
+            continue
+        spec = json.loads(path.read_text())
+        if spec["name"] in specs:
+            raise ValueError(f"{path.name} reuses colormap name {spec['name']!r}")
+        specs[spec["name"]] = spec
+    return specs
+
+
+SPECS = _load_specs()
 
 cmap = default_cmap.register({name: _build(s, SPECS) for name, s in SPECS.items()})

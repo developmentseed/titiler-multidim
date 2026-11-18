@@ -1,0 +1,15 @@
+{
+  "name": "AQI PM2.5 24hr breakpoints gradient",
+  "source": "EPA AQI category breakpoints, 24-hour PM2.5 (ug/m3) mapped to 8-hour ozone (ppb), so each PM2.5 category spans the same AQI O3 8hr breakpoints gradient colors as its ozone category",
+  "reference": "https://aqs.epa.gov/aqsweb/documents/codetables/aqi_breakpoints.html",
+  "notes": "Borrows the AQI O3 8hr breakpoints gradient stops, so it shares their limits: see that colormap's notes.",
+  "ramp": "AQI O3 8hr breakpoints gradient",
+  "breakpoints": {
+    "0.0": 0.0,
+    "9.0": 54.0,
+    "35.4": 70.0,
+    "55.4": 85.0,
+    "125.4": 105.0,
+    "225.4": 200.0
+  }
+}

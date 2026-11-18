@@ -12,10 +12,11 @@ from titiler.multidim import colormaps
 
 @pytest.mark.parametrize("spec", colormaps.SPECS.values(), ids=colormaps.SPECS.keys())
 def test_file_follows_schema(spec):
+    assert isinstance(spec["name"], str)
     assert isinstance(spec["source"], str)
     assert urlparse(spec["reference"]).scheme == "https"
     assert isinstance(spec.get("notes", ""), str)
-    keys = set(spec) - {"source", "reference", "notes"}
+    keys = set(spec) - {"name", "source", "reference", "notes"}
     if "stops" in spec:
         assert keys == {"stops"}
         assert all(re.fullmatch(r"#[0-9A-Fa-f]{6}", c) for c in spec["stops"].values())
@@ -66,7 +67,14 @@ def test_interpolation_points_increase(points):
     assert out_of_order == []
 
 
-@pytest.mark.parametrize("name", ["worldview_rainbow_4", "naqfc_o3", "naqfc_pm25"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "worldview_rainbow_4",
+        "AQI O3 8hr breakpoints gradient",
+        "AQI PM2.5 24hr breakpoints gradient",
+    ],
+)
 def test_api_lists_and_serves_custom_colormap(app, name):
     listed = {c["id"] for c in app.get("/colorMaps").json()["colormaps"]}
 
@@ -78,7 +86,7 @@ def test_tile_renders_with_custom_colormap(app):
     params = {
         **store_params["zarr_store_v2"]["params"],
         "rescale": "0,1",
-        "colormap_name": "naqfc_o3",
+        "colormap_name": "AQI O3 8hr breakpoints gradient",
     }
     response = app.get("/tiles/WebMercatorQuad/0/0/0.png", params=params)
 
