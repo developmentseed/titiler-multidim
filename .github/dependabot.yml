@@ -12,10 +12,7 @@ updates:
         applies-to: version-updates
         patterns:
           - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
+      # No security-updates group: while a grouped security PR is open, Dependabot defers fixes for packages not already in it.
     commit-message:
       prefix: "chore(deps):"
 
@@ -41,10 +38,7 @@ updates:
         applies-to: version-updates
         patterns:
           - "*"
-      security:
-        applies-to: security-updates
-        patterns:
-          - "*"
+      # No security-updates group: while a grouped security PR is open, Dependabot defers fixes for packages not already in it.
     commit-message:
       prefix: "ci(deps):"
 
